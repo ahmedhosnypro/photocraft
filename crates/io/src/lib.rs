@@ -156,7 +156,9 @@ pub fn open_warnings(doc: &Document) -> Vec<String> {
                     l.name,
                     table.len()
                 )),
-                None => out.push(format!("layer \"{}\": its Color Lookup has no usable table for a {size}³ lookup; the layer renders without the lookup", l.name)),
+                None => {
+                    out.push(format!("layer \"{}\": its Color Lookup has no usable table for a {size}³ lookup; the layer renders without the lookup", l.name))
+                }
             }
         }
         if let Some(children) = l.children() {
