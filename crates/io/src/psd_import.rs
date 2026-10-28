@@ -71,6 +71,9 @@ pub(crate) struct Ctx<'a> {
     pub unfiltered: std::collections::HashMap<String, Option<Surface>>,
     /// Pixel bytes retained in [`Self::unfiltered`], held under [`MAX_UNFILTERED_BYTES`].
     pub unfiltered_bytes: u64,
+    /// The same budget for the unfiltered pixels kept as a smart filter stack's replay input,
+    /// separate so mask-less layers cannot starve the mask mixing of later layers.
+    pub input_unfiltered_bytes: u64,
     /// Placed layers naming the same source share editable contents, not their placement.
     pub smart_contents: std::collections::HashMap<String, SmartContentsId>,
     /// Source sizes of `PlLd`-only placed layers, by source id (read once per embedded file).
@@ -1196,6 +1199,7 @@ fn psd_to_document_global(
         filter_masks: Default::default(),
         unfiltered: Default::default(),
         unfiltered_bytes: 0,
+        input_unfiltered_bytes: 0,
         smart_contents: Default::default(),
         plld_sizes: Default::default(),
         ctl: *ctl,

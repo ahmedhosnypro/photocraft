@@ -1488,6 +1488,10 @@ fn brush_patch_takes_friendly_forms_and_refuses_misplaced_keys() {
     .unwrap();
     assert!(b.pressure_size && b.square);
     assert_eq!((b.scattering.scatter.jitter, b.scattering.count_jitter.minimum), (1.0, 0.2));
+    // A section key renamed since older files wrote it keeps loading (the serde alias on the
+    // field intends it), so a persisted brush from before the rename is never refused.
+    let b = merge_brush(&base, &json!({"mixer": {"reloadAfterStroke": false}}), cmd).unwrap();
+    assert!(!b.mixer.load_after_stroke, "the legacy name lands on the current field");
     // A rejected patch leaves the brush alone.
     let mut s = session(40, 40);
     s.execute("paint.stroke", json!({"points": [[4, 20], [36, 20]], "size": 8, "brush": {"color": "#ff0000"}})).unwrap();

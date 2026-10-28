@@ -1447,6 +1447,40 @@ fn smart_filter_replay_honours_the_selection_of_undecodable_contents() {
     assert_eq!(replayed.read_region(outside), input.read_region(outside), "the replay keeps outside the selection unchanged");
 }
 
+/// A second filter added to a cache-only object keeps the first one: the whole recorded stack
+/// re-runs from the replay input, so the baked pixels are exactly what a later edit reproduces.
+#[test]
+fn every_added_smart_filter_stays_in_the_baked_pixels() {
+    let (mut s, _, _) = with_undecodable_contents(true);
+    s.execute("filter.blur.gaussianBlur", json!({"radius": 2})).unwrap();
+    s.execute("filter.noise.addNoise", json!({"amount": 20, "seed": 3})).unwrap();
+    let sm = active_smart(&s);
+    assert_eq!(sm.smart_filters.len(), 2);
+    let input = sm.raster_filters_input.clone().expect("the pre-filter pixels are kept");
+    let canvas = s.active().unwrap().doc.bounds();
+    let expected = super::rendering::apply_smart_filters(&input, &sm, canvas).unwrap();
+    let b = input.content_bounds();
+    assert_eq!(sm.cache.as_ref().unwrap().read_region(b), expected.read_region(b), "two adds bake exactly the replay of both filters");
+}
+
+/// Replace Contents drops the replay input of the old contents: a relink must never replay the
+/// stack over the previous file's pixels.
+#[test]
+fn replacing_contents_drops_the_old_replay_input() {
+    let (mut s, id, _) = with_undecodable_contents(true);
+    s.execute("filter.blur.gaussianBlur", json!({"radius": 2})).unwrap();
+    assert!(active_smart(&s).raster_filters_input.is_some(), "the placed pixels are the replay input");
+    let path = std::env::temp_dir().join(format!("pcraft-replace-{}-{id}.png", std::process::id()));
+    let small = Document::new("replacement", Size::new(8, 8), ColorMode::Rgb, SampleType::U8);
+    let r = photocraft_io::export(&small, "replacement.png", &Default::default()).unwrap();
+    std::fs::write(&path, &r.bytes).unwrap();
+    s.execute("layer.smartObjects.replaceContents", json!({"path": path.to_str().unwrap()})).unwrap();
+    let sm = active_smart(&s);
+    assert!(sm.raster_filters_input.is_none(), "the old contents' input is dropped");
+    assert_eq!(sm.smart_filters.len(), 1, "the filter stack is kept across the replace");
+    let _ = std::fs::remove_file(&path);
+}
+
 /// An imported filter stack is already baked into the cache (Photoshop applied it): the replay
 /// input is never taken from those pixels, so a new filter lands on them once, and an edit
 /// fails to re-render instead of double-applying the imported filters.

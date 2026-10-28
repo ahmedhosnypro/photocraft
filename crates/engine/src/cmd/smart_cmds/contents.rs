@@ -38,6 +38,9 @@ fn set_shared_source(s: &mut Session, id: LayerId, label: &str, keep_psd: bool, 
         let mut warnings = std::collections::BTreeSet::new();
         for &instance in &changed {
             smart_mut(doc, instance)?.source = new.clone();
+            // The old input belongs to the old contents: kept, a relink to another undecodable
+            // file would replay the stack over the previous contents' pixels.
+            smart_mut(doc, instance)?.raster_filters_input = None;
             if !keep_psd {
                 detach_psd(doc.layer_mut(instance).ok_or(EngineError::NoLayer(instance))?);
             }

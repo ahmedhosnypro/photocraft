@@ -127,6 +127,10 @@ const MOVED_BRUSH_KEYS: &[(&str, &str)] = &[("countJitter", "scattering.countJit
 /// spelled twice is a deserialisation error (`square` already serialises under its own name).
 const IMPLICIT_BRUSH_KEY_ALIASES: &[(&str, &str)] = &[("pressure_size", "pressureSize"), ("pressure_opacity", "pressureOpacity")];
 
+/// Section keys renamed since older files wrote them (section, old name, current name): a persisted
+/// brush from before the rename must keep loading, as the serde alias on the field intends.
+const SECTION_KEY_ALIASES: &[(&str, &str, &str)] = &[("mixer", "reloadAfterStroke", "loadAfterStroke")];
+
 /// Rewrite the friendly forms the schema itself rejects onto it, walking `patch` against `schema`
 /// (a serialised brush): `color` also takes the top-level command's hex string, a scalar where a
 /// [`photocraft_paint::Dynamic`] is wanted becomes its `{"jitter":…}` form, and a key that names no
@@ -148,6 +152,14 @@ fn normalize_brush_patch(patch: &Value, schema: &Value, cmd: &str, path: &str) -
                 return Err(bad(cmd, format!("`{here}` takes a number or a {{\"jitter\":number,…}} object")));
             };
             out.insert(k.clone(), json!({ "jitter": jitter }));
+            continue;
+        }
+        // A section key renamed since older files wrote it is rewritten to the name the schema
+        // serialises it as, so a persisted brush from before the rename keeps loading (the serde
+        // alias on the field intends that, and the refusal below would otherwise reject it).
+        let renamed = SECTION_KEY_ALIASES.iter().find(|(section, from, _)| *section == path && *from == k.as_str()).map(|(_, _, to)| *to);
+        if let Some(to) = renamed {
+            out.insert(to.to_string(), v.clone());
             continue;
         }
         // Implicit keys are accepted only at the brush ROOT (the PR's review fix): nested inside a

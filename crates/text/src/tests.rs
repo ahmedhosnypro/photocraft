@@ -2492,6 +2492,35 @@ fn txt2_frame_pure_scale_moves_the_scale_into_the_box() {
     assert_eq!(l2.transform, before);
 }
 
+/// A rewritten near-origin box (`bounds` == the box's own extents) is not folded again: with a
+/// small frame translation the mapped origin stays inside those extents, so the corner-and-size
+/// match is what marks the fold as already applied. A fresh frame whose translation cancels the
+/// scale at the corner still folds (its `bounds` are the scaled box, not the box).
+#[test]
+fn txt2_frame_rewritten_near_origin_box_is_not_folded_again() {
+    let mut t = styled("Casemiro 45", CharStyle { size_pt: 25.0, ..Default::default() });
+    t.shape = TextShape::Box { x: 20.0, y: 20.0, width: 100.0, height: 40.0 };
+    t.transform = Affine::translate(-700.0, -300.0);
+    // 0.97 scale with the translation that lands the corner back on (20, 20): the drawn bounds
+    // start exactly at the raw corner.
+    let txt2 = crate::psd::parse_txt2(&txt2_with_frame("Casemiro 45", None, [0.97, 0.0, 0.0, 0.97, 0.6, 0.6])).unwrap();
+    let built = with_text_index(&crate::psd::build_tysh(&t, 72.0, None), 0);
+    let tysh = with_bounds(&built, [20.0, 20.0, 117.0, 58.8]);
+    let mut l = crate::psd::text_layer_from_tysh(&tysh, 72.0).unwrap();
+    crate::psd::apply_txt2_frame(&mut l, &tysh, &txt2);
+    let TextShape::Box { x, y, .. } = l.shape else { panic!("not a box") };
+    assert!((f64::from(x) - 19.4).abs() < 1e-3 && (f64::from(y) - 19.4).abs() < 1e-3, "the fresh frame still folds: ({x}, {y})");
+    // The rewritten file writes the box's own extents as its bounds → already folded, refused.
+    let rewritten = with_text_index(&crate::psd::build_tysh(&l, 72.0, None), 0);
+    let rewritten = with_bounds(&rewritten, [19.4, 19.4, 116.4, 58.2]);
+    let mut l2 = crate::psd::text_layer_from_tysh(&rewritten, 72.0).unwrap();
+    let before = l2.transform;
+    crate::psd::apply_txt2_frame(&mut l2, &rewritten, &txt2);
+    let TextShape::Box { x, y, .. } = l2.shape else { panic!("not a box") };
+    assert!((f64::from(x) - 19.4).abs() < 1e-3 && (f64::from(y) - 19.4).abs() < 1e-3, "no second fold: ({x}, {y})");
+    assert_eq!(l2.transform, before);
+}
+
 /// Preferences ▸ Type ▸ Missing Glyph Protection: off, only the default family is in the
 /// fallback stack, so a face without the glyph shows the missing-glyph box instead of a
 /// fallback's glyph (#1909).
