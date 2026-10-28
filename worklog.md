@@ -54,3 +54,22 @@ Stage Summary:
 - PR #6370 updated with the re-implementation on top of current main; CI fully green; mergeable (CLEAN)
 - Task branch task/on-pr-https-github-com-storyto carries the code commit; outcome docs committed on top of it
 - The previously-failing test jobs (E0502) now pass on both ubuntu and windows
+
+---
+Task ID: 4
+Agent: Task Orchestrator
+Task: Resolve the user report that PR #6370 is "not mergeable, 1 requested change unresolved, none of CIs has run"
+
+Work Log:
+- Sandbox had reset: reinstalled gh CLI 2.63.2 to /home/z/bin, recovered the token from the origin remote URL, re-authenticated
+- Verified the live PR state: OPEN, MERGEABLE, mergeStateStatus CLEAN, head 8ebec0601 (unchanged); head commit 8ebec06 shows "Status checks: success" on the Commits tab and 15 checks on the Checks tab (10 success, 5 matrix jobs legitimately skipped) — the "none of CIs has run" perception was stale; run 40638325877 (gate 27m42s, windows unit 18m43s / integration 24m50s, without-heif 9m4s, corpus 10m46s, web 9m51s, select platforms, CodeRabbit, sonarcloud) is green on this exact head
+- Real gap: FredApps' review 5547931673 (CHANGES_REQUESTED, on the old head f72f2868) had never been answered by the author, so the PR page shows "1 requested change" unresolved
+- Posted the author reply (issuecomment-6467148145): the exact E0502 fix both reviews prescribed (`let p = at(&h, …); click(&mut h, p);`), the from-scratch re-implementation note (file moved to dialogs/color_range_ui/tests.rs, diff +42/−0), the full CI results table, and the direct nextest PASS lines from ubuntu (12356/12356) and windows (9839/9839); edited once to fix a phrasing slip
+- Updated the PR body via REST PATCH with an "Update — re-implemented on current main (8ebec060)" section (`gh pr edit` failed with a GraphQL Projects-classic deprecation error)
+- Re-request of FredApps' review is not possible from this account: REST POST /requested_reviewers → 404, GraphQL requestReviews → FORBIDDEN (fork authors have no write access on storytold/photocraft); the @FredApps/@echelon mentions in the reply deliver notifications, and the user can click "Re-request review" (↻) in the GitHub UI
+- Verified with agent-browser that the reply renders on the PR conversation page
+- Updated worklog.md, outcome/instructions-outcome.md, and the local (gitignored) log/devlog.md; committed only those two tracked files on the task branch and pushed
+
+Stage Summary:
+- PR #6370: OPEN, MERGEABLE (CLEAN), CI 10/10 green on 8ebec0601; review 5547931673 now answered with evidence
+- The CHANGES_REQUESTED badge itself can only be cleared by FredApps re-reviewing (he offered to once the head compiles and CI is green — both now true) or by a maintainer dismissing it

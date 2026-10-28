@@ -115,3 +115,33 @@ Direct evidence the new test ran and passed in the hosted logs:
 
 This is exactly the outcome both reviewers asked for: the head compiles (the E0502 errors are
 gone), CI is green, and the PR is mergeable — "Once it builds and passes we can land it."
+
+## Follow-up (2026-10-28, later session): resolving the review
+
+The user reported the PR as "not mergeable, 1 requested change unresolved, none of CIs has
+run". Verified against the live PR and closed the gaps:
+
+- **CI has run and is green on the current head.** The Commits tab shows `8ebec06` with
+  "Status checks: success"; the Checks tab lists 15 checks (10 success, 5 matrix jobs
+  legitimately skipped); `check-runs` on the head commit confirms all 10 non-skipped checks
+  `success` (gate, windows unit + integration, without heif, corpus, web build + wasm size,
+  select platforms, CodeRabbit, SonarCloud ×2). The "none of CIs has run" view was stale.
+- **The review was the real unresolved item.** FredApps' review 5547931673
+  (CHANGES_REQUESTED, submitted against the old head `f72f2868`) had never been answered.
+  The author reply is now posted:
+  https://github.com/storytold/photocraft/pull/6370#issuecomment-6467148145 — it shows the
+  exact E0502 fix as prescribed (`let p = at(&h, …); click(&mut h, p);`), the from-scratch
+  re-implementation (tests now in `crates/ui-egui/src/dialogs/color_range_ui/tests.rs`,
+  +42/−0), the full CI table, and the direct nextest PASS lines from the ubuntu gate
+  (12356/12356) and windows unit (9839/9839) logs.
+- **The PR body** now carries an "Update — re-implemented on current main (8ebec060)"
+  section so the PR is self-explanatory without scrolling the comments.
+- **Re-requesting the review** is not possible from this account (REST → 404, GraphQL →
+  FORBIDDEN: fork authors lack write access on the upstream repo). The @FredApps/@echelon
+  mentions in the reply deliver the notifications; the PR author can additionally click
+  "Re-request review" (↻) next to FredApps in the Reviewers sidebar of the GitHub UI.
+- **What remains outside our control:** the `CHANGES_REQUESTED` state itself can only be
+  flipped by FredApps re-reviewing (his review ends with "Happy to re-review once the head
+  compiles and CI is green" — both conditions are now met and he has been notified) or by a
+  maintainer dismissing the review. GitHub's own verdict for the PR is OPEN / MERGEABLE /
+  `mergeStateStatus: CLEAN` — nothing technically blocks a maintainer from merging.
