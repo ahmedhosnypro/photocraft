@@ -159,6 +159,11 @@ fn normalize_brush_patch(patch: &Value, schema: &Value, cmd: &str, path: &str) -
         // alias on the field intends that, and the refusal below would otherwise reject it).
         let renamed = SECTION_KEY_ALIASES.iter().find(|(section, from, _)| *section == path && *from == k.as_str()).map(|(_, _, to)| *to);
         if let Some(to) = renamed {
+            // Both spellings in one patch would merge onto one field with the last value
+            // winning silently: refuse instead.
+            if out.contains_key(to) || keys.contains_key(to) {
+                return Err(bad(cmd, format!("`{here}` and `{to}` name the same setting: pass one")));
+            }
             out.insert(to.to_string(), v.clone());
             continue;
         }
@@ -185,8 +190,12 @@ fn normalize_brush_patch(patch: &Value, schema: &Value, cmd: &str, path: &str) -
             }
         }
         // An object merges key by key; another variant of an externally tagged enum replaces the
-        // old one wholesale.
+        // old one wholesale. An alias processed first may already have written this canonical
+        // name: both spellings in one patch are a conflict, refused like the reverse order.
         if let Some(sv) = want {
+            if out.contains_key(k.as_str()) {
+                return Err(bad(cmd, format!("`{here}` and `{k}` name the same setting: pass one")));
+            }
             match (sv, v) {
                 (Value::Object(s), Value::Object(p)) if s.len() != 1 || p.len() != 1 || s.keys().next() == p.keys().next() => {
                     out.insert(k.clone(), normalize_brush_patch(v, sv, cmd, &here)?);
@@ -197,8 +206,12 @@ fn normalize_brush_patch(patch: &Value, schema: &Value, cmd: &str, path: &str) -
             }
         } else {
             // An implicit key is emitted under the name the schema serialises it as (the review's
-            // alias note), never its alias.
+            // alias note), never its alias. Both spellings in one patch would merge onto one
+            // field with the last value winning silently: refuse instead.
             let key = IMPLICIT_BRUSH_KEY_ALIASES.iter().find(|(from, _)| *from == k.as_str()).map(|(_, to)| *to).unwrap_or(k.as_str());
+            if key != k.as_str() && (out.contains_key(key) || keys.contains_key(key)) {
+                return Err(bad(cmd, format!("`{here}` and `{key}` name the same setting: pass one")));
+            }
             out.insert(key.to_string(), v.clone());
         }
     }

@@ -2490,6 +2490,30 @@ fn txt2_frame_pure_scale_moves_the_scale_into_the_box() {
     let TextShape::Box { x, y, .. } = l2.shape else { panic!("not a box") };
     assert!((f64::from(x) - 485.0).abs() < 1e-3 && (f64::from(y) - 582.0).abs() < 1e-3, "no second fold: ({x}, {y})");
     assert_eq!(l2.transform, before);
+
+    // Above one: a fresh 1.03 frame folds the box up, and the rewritten file (its bounds are the
+    // box's own extents) is still refused — the mapped origin staying inside those extents must
+    // not read as a fresh frame.
+    let txt2_up = crate::psd::parse_txt2(&txt2_with_frame("Casemiro 45", None, [1.03, 0.0, 0.0, 1.03, 0.0, 0.0])).unwrap();
+    let mut t_up = styled("Casemiro 45", CharStyle { size_pt: 25.0, ..Default::default() });
+    t_up.shape = TextShape::Box { x: 500.0, y: 600.0, width: 300.0, height: 90.0 };
+    t_up.transform = Affine::translate(-700.0, -300.0);
+    let built_up = with_text_index(&crate::psd::build_tysh(&t_up, 72.0, None), 0);
+    let tysh_up = with_bounds(&built_up, [515.0, 618.0, 824.0, 710.7]);
+    let mut l_up = crate::psd::text_layer_from_tysh(&tysh_up, 72.0).unwrap();
+    crate::psd::apply_txt2_frame(&mut l_up, &tysh_up, &txt2_up);
+    let TextShape::Box { x, y, width, height } = l_up.shape else { panic!("not a box") };
+    assert!((f64::from(x) - 515.0).abs() < 1e-3 && (f64::from(y) - 618.0).abs() < 1e-3, "the >1 frame folds up: ({x}, {y})");
+    assert!((f64::from(width) - 309.0).abs() < 1e-3 && (f64::from(height) - 92.7).abs() < 1e-2, "the box keeps its text-space size: {width}×{height}");
+    assert!((scale_of(l_up.transform.m) - 1.0).abs() < 1e-9, "frame scale leaked into the transform: {}", scale_of(l_up.transform.m));
+    let rewritten_up = with_text_index(&crate::psd::build_tysh(&l_up, 72.0, None), 0);
+    let rewritten_up = with_bounds(&rewritten_up, [515.0, 618.0, 824.0, 710.7]);
+    let mut l2_up = crate::psd::text_layer_from_tysh(&rewritten_up, 72.0).unwrap();
+    let before_up = l2_up.transform;
+    crate::psd::apply_txt2_frame(&mut l2_up, &rewritten_up, &txt2_up);
+    let TextShape::Box { x, y, .. } = l2_up.shape else { panic!("not a box") };
+    assert!((f64::from(x) - 515.0).abs() < 1e-3 && (f64::from(y) - 618.0).abs() < 1e-3, "no second fold: ({x}, {y})");
+    assert_eq!(l2_up.transform, before_up);
 }
 
 /// A rewritten near-origin box (`bounds` == the box's own extents) is not folded again: with a

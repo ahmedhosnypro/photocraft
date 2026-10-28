@@ -1492,6 +1492,14 @@ fn brush_patch_takes_friendly_forms_and_refuses_misplaced_keys() {
     // field intends it), so a persisted brush from before the rename is never refused.
     let b = merge_brush(&base, &json!({"mixer": {"reloadAfterStroke": false}}), cmd).unwrap();
     assert!(!b.mixer.load_after_stroke, "the legacy name lands on the current field");
+    // Both spellings of one field in one patch would merge with the last value winning
+    // silently: refused, in either order.
+    let e = merge_brush(&base, &json!({"mixer": {"loadAfterStroke": true, "reloadAfterStroke": false}}), cmd).unwrap_err();
+    assert!(e.to_string().contains("same setting"), "{e}");
+    let e = merge_brush(&base, &json!({"pressure_size": true, "pressureSize": false}), cmd).unwrap_err();
+    assert!(e.to_string().contains("same setting"), "{e}");
+    let e = merge_brush(&base, &json!({"pressureSize": false, "pressure_size": true}), cmd).unwrap_err();
+    assert!(e.to_string().contains("same setting"), "{e}");
     // A rejected patch leaves the brush alone.
     let mut s = session(40, 40);
     s.execute("paint.stroke", json!({"points": [[4, 20], [36, 20]], "size": 8, "brush": {"color": "#ff0000"}})).unwrap();
