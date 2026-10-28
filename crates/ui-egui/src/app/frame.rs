@@ -36,6 +36,11 @@ impl PhotocraftApp {
             self.fonts_ready = true;
         }
         self.frame += 1;
+        // Liveness for `health` and the transport's stall fallback (#2493): a logic pass ran,
+        // so the loop is alive even when the compositor withholds frame callbacks.
+        if let Some(w) = self.watch.as_ref() {
+            w.note_logic();
+        }
         let now = ctx.input(|i| i.time);
         let dt = (now - self.last_frame_time) as f32;
         if dt > 0.0 {
@@ -313,6 +318,11 @@ impl PhotocraftApp {
             self.perf.record_gpu(t);
         }
         self.perf.frame(ui_ms);
+        // A frame was drawn (#2493): the drawn counter stalls while the window is hidden or
+        // occluded, which is exactly what `health` and `frameStalled` report.
+        if let Some(w) = self.watch.as_ref() {
+            w.note_drawn();
+        }
         if self.stroke_trace.enabled() {
             self.stroke_trace.canvas(self.perf.frame_refresh_ms);
             let info = &self.perf.gpu_info;
