@@ -651,6 +651,7 @@ impl Ctx<'_> {
             transform,
             smart_filters: stack.filters,
             cache: Some(cache),
+            raster_filters_input: None,
             psd_raw: principal(k),
             filters_enabled: stack.enabled,
             filter_mask,

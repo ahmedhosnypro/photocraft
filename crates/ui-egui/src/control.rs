@@ -150,8 +150,8 @@ pub fn not_drawing_frames_error() -> String {
 
 /// The read-only getters whose last reply is kept for serving while the frame loop is
 /// wedged: the methods an agent probes state with. `document.inspect` is keyed per
-/// document (the `document` param, top-level or inside `params`), since each document has
-/// its own reply; no param means the active document.
+/// document (the `document` param inside `params`, which is what `engine.execute`
+/// dispatches), since each document has its own reply; no param means the active document.
 pub fn snapshot_key(method: &str, params: &Value) -> Option<String> {
     match method {
         "ui.inspect" => Some("ui.inspect".into()),
@@ -162,7 +162,7 @@ pub fn snapshot_key(method: &str, params: &Value) -> Option<String> {
             let command = params.get("command").or_else(|| params.get("id")).and_then(Value::as_str)?;
             match command {
                 "document.inspect" => {
-                    let index = params.get("document").or_else(|| params.get("params").and_then(|p| p.get("document")));
+                    let index = params.get("params").and_then(|p| p.get("document"));
                     Some(match index {
                         Some(index) => format!("engine.execute:document.inspect:{}", index_key(index)),
                         None => "engine.execute:document.inspect".into(),

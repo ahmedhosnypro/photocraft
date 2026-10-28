@@ -2459,6 +2459,39 @@ fn txt2_frame_scale_does_not_shrink_the_type() {
     assert!((scale_of(l.transform.m) - 1.0).abs() < 1e-9, "frame scale leaked into the transform: {}", scale_of(l.transform.m));
 }
 
+/// A box frame whose matrix carries only a scale (no rotation, no translation) still folds the
+/// scale into the box coordinates: the mapped origin is the raw `BoxBounds` under the frame's
+/// full matrix, which lands in the drawn `bounds`, while re-folding a rewritten file (the
+/// frame's scale applied twice) lands the box corner short of it and is refused.
+#[test]
+fn txt2_frame_pure_scale_moves_the_scale_into_the_box() {
+    let scale_of = |m: [f64; 6]| (m[0] * m[3] - m[1] * m[2]).abs().sqrt();
+    let mut t = styled("Casemiro 45", CharStyle { size_pt: 25.0, ..Default::default() });
+    t.shape = TextShape::Box { x: 500.0, y: 600.0, width: 300.0, height: 90.0 };
+    t.transform = Affine::translate(-700.0, -300.0);
+    let txt2 = crate::psd::parse_txt2(&txt2_with_frame("Casemiro 45", None, [0.97, 0.0, 0.0, 0.97, 0.0, 0.0])).unwrap();
+    // Photoshop drew the text where the full matrix maps the box: the bounds start at its corner.
+    let built = with_text_index(&crate::psd::build_tysh(&t, 72.0, None), 0);
+    let tysh = with_bounds(&built, [485.0, 582.0, 776.0, 669.0]);
+    let mut l = crate::psd::text_layer_from_tysh(&tysh, 72.0).unwrap();
+    crate::psd::apply_txt2_frame(&mut l, &tysh, &txt2);
+    let TextShape::Box { x, y, width, height } = l.shape else { panic!("not a box") };
+    assert!((f64::from(x) - 485.0).abs() < 1e-3 && (f64::from(y) - 582.0).abs() < 1e-3, "the box carries the frame scale: ({x}, {y})");
+    assert!((f64::from(width) - 291.0).abs() < 1e-3 && (f64::from(height) - 87.3).abs() < 1e-3, "the box keeps its text-space size: {width}×{height}");
+    assert!((scale_of(l.transform.m) - 1.0).abs() < 1e-9, "frame scale leaked into the transform: {}", scale_of(l.transform.m));
+    assert_eq!(l.transform, Affine::translate(-700.0, -300.0), "a pure-scale frame adds nothing to the transform");
+    // The fold is idempotent: the rewritten file (its `BoxBounds` already frame-space, the same
+    // `Txt2` frame) re-folds to a corner outside the drawn bounds and stays as it was.
+    let rewritten = with_text_index(&crate::psd::build_tysh(&l, 72.0, None), 0);
+    let rewritten = with_bounds(&rewritten, [485.0, 582.0, 776.0, 669.0]);
+    let mut l2 = crate::psd::text_layer_from_tysh(&rewritten, 72.0).unwrap();
+    let before = l2.transform;
+    crate::psd::apply_txt2_frame(&mut l2, &rewritten, &txt2);
+    let TextShape::Box { x, y, .. } = l2.shape else { panic!("not a box") };
+    assert!((f64::from(x) - 485.0).abs() < 1e-3 && (f64::from(y) - 582.0).abs() < 1e-3, "no second fold: ({x}, {y})");
+    assert_eq!(l2.transform, before);
+}
+
 /// Preferences ▸ Type ▸ Missing Glyph Protection: off, only the default family is in the
 /// fallback stack, so a face without the glyph shows the missing-glyph box instead of a
 /// fallback's glyph (#1909).

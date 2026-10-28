@@ -1393,6 +1393,38 @@ fn smart_filters_apply_to_the_cached_pixels_of_undecodable_contents() {
     assert_ne!(sm.cache.as_ref().unwrap().read_region(b), before.read_region(b), "the cache is filtered");
 }
 
+/// A filter baked into the cache of an undecodable source stays editable: its params change
+/// replays the recorded stack from the kept pre-filter pixels instead of failing to re-render
+/// the source. The kept input is the placed pixels, so a fully disabled stack renders them.
+#[test]
+fn smart_filter_edits_replay_from_the_kept_input_of_undecodable_contents() {
+    let (mut s, _, bytes) = with_undecodable_contents(true);
+    s.execute("filter.blur.gaussianBlur", json!({"radius": 3})).unwrap();
+    let r3 = active_smart(&s).cache.clone().unwrap();
+    let input = active_smart(&s).raster_filters_input.clone().expect("the pre-filter pixels are kept for replay");
+    assert_ne!(r3.read_region(input.content_bounds()), input.read_region(input.content_bounds()), "the cache is the filtered input");
+
+    s.execute("layer.smartFilter.setParams", json!({"index": 0, "params": {"radius": 8}})).unwrap();
+    let sm = active_smart(&s);
+    assert_eq!(sm.smart_filters[0].params["radius"], 8);
+    assert_eq!(embedded_source_bytes(&sm), bytes, "the source bytes are untouched");
+    assert_eq!(
+        sm.raster_filters_input.as_ref().unwrap().read_region(input.content_bounds()),
+        input.read_region(input.content_bounds()),
+        "the kept input is untouched"
+    );
+    assert_ne!(sm.cache.as_ref().unwrap().read_region(r3.content_bounds()), r3.read_region(r3.content_bounds()), "the edit re-rendered from the input");
+
+    // Hiding the filter replays to the plain placed pixels.
+    s.execute("layer.smartFilter.setVisible", json!({"index": 0})).unwrap();
+    let sm = active_smart(&s);
+    assert_eq!(
+        sm.cache.as_ref().unwrap().read_region(input.content_bounds()),
+        input.read_region(input.content_bounds()),
+        "no visible filter: the placed pixels show"
+    );
+}
+
 /// #4085 (review): the rasterized fallback is a read-only copy — no link back to the parent — so
 /// editing and saving (or closing) it never rewrites the layer: committing the cache would
 /// re-render the already-placed, already-filtered pixels through the layer's transform and smart

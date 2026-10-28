@@ -141,7 +141,9 @@ fn stroke_accepts_full_points_brush_and_preset() {
 #[test]
 fn stroke_spacing_is_a_diameter_fraction() {
     // The documented contract: `spacing` multiplies the diameter (Photoshop's percent), so
-    // a size-50 spacing-5 stroke stamps dabs 250px apart — two bands on a 320px path.
+    // a size-50 spacing-5 stroke stamps dabs 250px apart — two bands on a 320px path. Each
+    // band spans the diameter plus the tip's ~1px anti-aliased shoulder, so only the dab
+    // centres and the pitch are pinned, not the exact alpha>0 rows.
     let mut s = session(400, 400);
     s.execute("paint.stroke", json!({"points": [[200, 40], [200, 360]], "size": 50, "spacing": 5, "color": "#ff0000"})).unwrap();
     let painted: Vec<i32> = (0..400).filter(|&y| rgba(&s, 200, y)[3] > 0.0).collect();
@@ -152,7 +154,14 @@ fn stroke_spacing_is_a_diameter_fraction() {
             _ => bands.push((y, y)),
         }
     }
-    assert_eq!(bands, vec![(15, 64), (265, 314)], "pitch = size × spacing = 250px");
+    assert_eq!(bands.len(), 2, "spacing 5 → dabs every 250px: two bands on a 320px path, got {bands:?}");
+    let center = |b: &(i32, i32)| f64::from(b.0 + b.1) / 2.0;
+    assert!((center(&bands[0]) - 40.0).abs() <= 1.0, "the first dab stamps at the path start, band {:?}", bands[0]);
+    assert!((center(&bands[1]) - center(&bands[0]) - 250.0).abs() <= 1.0, "pitch = size × spacing = 250px, bands {bands:?}");
+    for b in &bands {
+        let width = b.1 - b.0 + 1;
+        assert!((48..=56).contains(&width), "a size-50 dab spans ~50px plus the AA shoulder, band {b:?}");
+    }
 }
 
 #[test]

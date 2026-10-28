@@ -179,11 +179,14 @@ pub fn apply_txt2_frame(layer: &mut TextLayer, tysh: &[u8], txt2: &E) {
     // the type keeps its size in the panel's √|det| and the glyph mapping.
     let s = to_text.determinant().abs().sqrt();
     let (frame_scale, to_text) = if s.is_finite() && s > 1e-9 { (s, to_text.mul(&Affine::scale(1.0 / s))) } else { (1.0, to_text) };
-    // The frame's origin (point text: the anchor; box text: the box's top left) must land in
-    // the text-space `bounds` Photoshop wrote beside it, and not already be there without it. A `TySh` PhotoCraft rewrote (an edited
-    // or moved layer whose text is unchanged keeps its old `Txt2` object and frame) already has
-    // the frame folded into its transform and its `bounds` near the origin: applying the frame
-    // again would move it twice.
+    // The frame's origin (point text: the anchor; box text: the box's top left scaled into
+    // frame space) must land in the text-space `bounds` Photoshop wrote beside it. A `TySh`
+    // PhotoCraft rewrote (an edited or moved layer whose text is unchanged keeps its old
+    // `Txt2` object and frame) already has the frame folded into its transform and its
+    // `bounds` near the origin: applying the frame again would move it twice. Point text
+    // catches that by the anchor already sitting in the bounds without the frame; box text
+    // by the mapped origin missing them (the frame's scale applied twice lands the box
+    // corner short of where it was drawn), which also lets a pure-scale frame apply.
     let origin = match layer.shape {
         TextShape::Point | TextShape::Path { .. } => Point::new(0.0, 0.0),
         TextShape::Box { .. } | TextShape::Area { .. } => {
@@ -205,7 +208,10 @@ pub fn apply_txt2_frame(layer: &mut TextLayer, tysh: &[u8], txt2: &E) {
     };
     let Some([l, top, r, bottom]) = descriptor_rect(&t.text, "bounds") else { return };
     let inside = |p: Point| p.x >= l - 1.0 && p.x <= r + 1.0 && p.y >= top - 1.0 && p.y <= bottom + 1.0;
-    if inside(origin) || !inside(to_text.apply(origin)) {
+    if matches!(layer.shape, TextShape::Point | TextShape::Path { .. }) && inside(origin) {
+        return;
+    }
+    if !inside(to_text.apply(origin)) {
         return;
     }
     if let TextShape::Box { x, y, width, height } = &mut layer.shape {

@@ -59,7 +59,8 @@ fn mask_from_selection(sel: &Surface) -> LayerMask {
 
 /// Appends a smart filter (from a `filter.*` command) and re-renders. A selection becomes the
 /// filter mask, as in Photoshop. Without a renderable source the filter is applied to the cached
-/// pixels (and still recorded).
+/// pixels (and still recorded): the pre-filter pixels move into `raster_filters_input`, so the
+/// recorded stack stays editable by replay (`refresh_layer_in`).
 pub(crate) fn add_smart_filter(doc: &mut Document, id: LayerId, sf: photocraft_doc::SmartFilter, selection: Option<&Surface>) -> Result<()> {
     let canvas = doc.bounds();
     let renderable = renderable_source(doc, smart(doc, id)?);
@@ -74,8 +75,12 @@ pub(crate) fn add_smart_filter(doc: &mut Document, id: LayerId, sf: photocraft_d
         return refresh_or_fail(doc, id);
     }
     let bounds = selection.map(Surface::content_bounds).filter(|b| !b.is_empty()).unwrap_or(canvas);
-    let cache = sm.cache.as_ref().ok_or_else(|| other("smart object has no pixels"))?;
-    let out = crate::filters::apply_filter_to_surface(&sf.command, &sf.params, cache, bounds, selection, canvas)?
+    if sm.raster_filters_input.is_none() {
+        let cache = sm.cache.take().ok_or_else(|| other("smart object has no pixels"))?;
+        sm.raster_filters_input = Some(cache);
+    }
+    let input = sm.raster_filters_input.as_ref().ok_or_else(|| other("smart object has no pixels"))?;
+    let out = crate::filters::apply_filter_to_surface(&sf.command, &sf.params, input, bounds, selection, canvas)?
         .ok_or_else(|| other(format!("unknown filter {}", sf.command)))?;
     sm.cache = Some(out);
     sm.smart_filters.push(sf);

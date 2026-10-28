@@ -134,7 +134,7 @@ fn undecodable_contents(file_name: &str, e: EngineError) -> EngineError {
         _ => return e,
     };
     other(format!(
-        "PhotoCraft can't edit {kind} smart object ({file_name}) yet. Export its contents as a PSD, PNG or another format PhotoCraft reads and use Replace Contents"
+        "PhotoCraft can't edit {kind} smart object ({file_name}) yet. Export its contents unchanged (the same file type: the original bytes), convert them to a format PhotoCraft reads in another application, and use Replace Contents"
     ))
 }
 

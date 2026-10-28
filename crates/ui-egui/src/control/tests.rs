@@ -2063,19 +2063,26 @@ fn snapshot_key_covers_only_the_read_only_getters_agents_probe_with() {
         Some("engine.execute:document.inspect"),
         "no `document` param: the active document"
     );
-    assert_eq!(snapshot_key("engine.execute", &json!({"command": "document.inspect", "document": 3})).as_deref(), Some("engine.execute:document.inspect:3"));
     assert_eq!(
         snapshot_key("engine.execute", &json!({"command": "document.inspect", "params": {"document": 3}})).as_deref(),
         Some("engine.execute:document.inspect:3"),
         "the spelling `engine.execute` dispatch reads"
     );
+    assert_eq!(
+        snapshot_key("engine.execute", &json!({"command": "document.inspect", "document": 3})).as_deref(),
+        Some("engine.execute:document.inspect"),
+        "a top-level `document` is ignored, as by dispatch: the active document's snapshot"
+    );
     assert_ne!(
-        snapshot_key("engine.execute", &json!({"command": "document.inspect", "document": 1})),
-        snapshot_key("engine.execute", &json!({"command": "document.inspect", "document": 2})),
+        snapshot_key("engine.execute", &json!({"command": "document.inspect", "params": {"document": 1}})),
+        snapshot_key("engine.execute", &json!({"command": "document.inspect", "params": {"document": 2}})),
         "different indexes get different snapshots"
     );
     // `dispatch` accepts the command id as `command` or `id`; both spellings key alike.
-    assert_eq!(snapshot_key("engine.execute", &json!({"id": "document.inspect", "document": 1})).as_deref(), Some("engine.execute:document.inspect:1"));
+    assert_eq!(
+        snapshot_key("engine.execute", &json!({"id": "document.inspect", "params": {"document": 1}})).as_deref(),
+        Some("engine.execute:document.inspect:1")
+    );
     assert_eq!(snapshot_key("engine.execute", &json!({"id": "document.inspect"})).as_deref(), Some("engine.execute:document.inspect"));
     assert_eq!(snapshot_key("engine.execute", &json!({"command": "session.inspect"})).as_deref(), Some("engine.execute:session.inspect"));
     // Only those two engine commands read state; everything else changes it.
