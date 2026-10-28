@@ -1,5 +1,5 @@
 use super::rendering::{refresh_or_fail, refresh_or_fail_in};
-use super::source::source_bytes;
+use super::source::renderable_source;
 use super::{
     BlendMode, Document, EngineError, Layer, LayerContent, LayerId, LayerMask, Result, Session, SmartObject, Surface, Value, bad, blend_from_str, json,
     layer_param, other,
@@ -62,7 +62,7 @@ fn mask_from_selection(sel: &Surface) -> LayerMask {
 /// pixels (and still recorded).
 pub(crate) fn add_smart_filter(doc: &mut Document, id: LayerId, sf: photocraft_doc::SmartFilter, selection: Option<&Surface>) -> Result<()> {
     let canvas = doc.bounds();
-    let renderable = source_bytes(&doc.metadata, &smart(doc, id)?.source).is_some();
+    let renderable = renderable_source(doc, smart(doc, id)?);
     let sm = smart_mut(doc, id)?;
     if renderable {
         if let Some(sel) = selection
