@@ -1425,6 +1425,67 @@ fn smart_filter_edits_replay_from_the_kept_input_of_undecodable_contents() {
     );
 }
 
+/// A filter added under a selection bakes only the selected pixels, and the selection is kept
+/// as the filter mask — the replay honours it, so pixels outside the selection stay the
+/// placed ones while the params edit re-renders inside it.
+#[test]
+fn smart_filter_replay_honours_the_selection_of_undecodable_contents() {
+    let (mut s, _, _) = with_undecodable_contents(true);
+    let input = active_smart(&s).cache.clone().unwrap();
+    let (inside, outside) = (Rect::new(0, 0, 20, 20), Rect::new(24, 0, 64, 48));
+    s.execute("select.rect", json!({"x": 0, "y": 0, "width": 20, "height": 20})).unwrap();
+    s.execute("filter.blur.gaussianBlur", json!({"radius": 4})).unwrap();
+    let sm = active_smart(&s);
+    assert!(sm.filter_mask.is_some(), "the selection is kept as the replay mask");
+    let baked = sm.cache.clone().unwrap();
+    assert_ne!(baked.read_region(inside), input.read_region(inside), "the filter bakes inside the selection");
+    assert_eq!(baked.read_region(outside), input.read_region(outside), "pixels outside the selection stay the placed ones");
+
+    s.execute("layer.smartFilter.setParams", json!({"index": 0, "params": {"radius": 12}})).unwrap();
+    let replayed = active_smart(&s).cache.clone().unwrap();
+    assert_ne!(replayed.read_region(inside), baked.read_region(inside), "the edit re-renders inside the mask");
+    assert_eq!(replayed.read_region(outside), input.read_region(outside), "the replay keeps outside the selection unchanged");
+}
+
+/// An imported filter stack is already baked into the cache (Photoshop applied it): the replay
+/// input is never taken from those pixels, so a new filter lands on them once, and an edit
+/// fails to re-render instead of double-applying the imported filters.
+#[test]
+fn imported_filters_are_not_replayed_from_their_own_pixels() {
+    let (mut s, id, _) = with_undecodable_contents(true);
+    // Model the import: the stack is recorded and its effect is baked into the cache.
+    s.edit("imported stack", |doc, _| {
+        let canvas = doc.bounds();
+        let sm = smart_mut(doc, LayerId(id))?;
+        let cache = sm.cache.as_ref().ok_or_else(|| EngineError::Other("no cache".into()))?;
+        let out =
+            crate::filters::apply_filter_to_surface("filter.blur.gaussianBlur", &json!({"radius": 2}), cache, canvas, None, canvas)?.expect("known filter");
+        sm.cache = Some(out);
+        sm.smart_filters.push(SmartFilter {
+            command: "filter.blur.gaussianBlur".into(),
+            params: json!({"radius": 2}),
+            blend: BlendMode::Normal,
+            opacity: 1.0,
+            visible: true,
+        });
+        Ok(())
+    })
+    .unwrap();
+    let imported = active_smart(&s).cache.clone().unwrap();
+    s.execute("filter.blur.gaussianBlur", json!({"radius": 8})).unwrap();
+    let sm = active_smart(&s);
+    assert_eq!(sm.smart_filters.len(), 2);
+    assert!(sm.raster_filters_input.is_none(), "the filtered cache never becomes the replay input");
+    let baked = sm.cache.clone().unwrap();
+    let b = imported.content_bounds();
+    assert_ne!(baked.read_region(b), imported.read_region(b), "the new filter lands on the imported pixels");
+    // Editing any filter would replay the whole stack on the input — refused instead.
+    assert!(
+        s.execute("layer.smartFilter.setParams", json!({"index": 1, "params": {"radius": 16}})).is_err(),
+        "no replay input: the edit fails instead of double-applying"
+    );
+}
+
 /// #4085 (review): the rasterized fallback is a read-only copy — no link back to the parent — so
 /// editing and saving (or closing) it never rewrites the layer: committing the cache would
 /// re-render the already-placed, already-filtered pixels through the layer's transform and smart
