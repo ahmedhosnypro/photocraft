@@ -360,20 +360,29 @@ impl Ctx<'_> {
 
     /// The unfiltered pixels of the smart object whose `placed` id is `placed`, from the `FEid`
     /// cache: decoded once per source and kept until the import ends, so what they add up to is
-    /// bounded: past the limit the answer stays `None` (the layer keeps its stored pixels).
-    fn unfiltered_surface(&mut self, placed: &str) -> Option<Surface> {
+    /// bounded: past the limit the answer stays `None` (the layer keeps its stored pixels). The
+    /// mask mixing and the replay-input use keep separate budgets, so mask-less layers cannot
+    /// starve a later layer's mask. Only successful decodes are cached: a budget miss must not
+    /// block the other use.
+    fn unfiltered_surface(&mut self, placed: &str, replay_input: bool) -> Option<Surface> {
         if let Some(done) = self.unfiltered.get(placed) {
             return done.clone();
         }
-        let item = self.filter_effects.iter().find(|i| i.id == placed);
-        let cost =
-            item.and_then(|i| i.rect.size().ok()).map_or(0, |(w, h)| (w as u64).saturating_mul(h as u64).saturating_mul(self.fmt.bytes_per_pixel() as u64));
-        let fits = self.unfiltered_bytes.saturating_add(cost) <= MAX_UNFILTERED_BYTES;
-        let made = item.filter(|_| fits).and_then(|i| crate::smart_map::unfiltered_from_item(i, self.fmt));
-        if made.is_some() {
-            self.unfiltered_bytes += cost;
+        let item = self.filter_effects.iter().find(|i| i.id == placed)?;
+        let cost = item.rect.size().ok().map_or(0, |(w, h)| (w as u64).saturating_mul(h as u64).saturating_mul(self.fmt.bytes_per_pixel() as u64));
+        let used = if replay_input { self.input_unfiltered_bytes } else { self.unfiltered_bytes };
+        if used.saturating_add(cost) > MAX_UNFILTERED_BYTES {
+            return None;
         }
-        self.unfiltered.insert(placed.to_owned(), made.clone());
+        let made = crate::smart_map::unfiltered_from_item(item, self.fmt);
+        if made.is_some() {
+            if replay_input {
+                self.input_unfiltered_bytes += cost;
+            } else {
+                self.unfiltered_bytes += cost;
+            }
+            self.unfiltered.insert(placed.to_owned(), made.clone());
+        }
         made
     }
 
@@ -644,15 +653,12 @@ impl Ctx<'_> {
         // The unfiltered pixels are also what a filter stack replays from: with them kept,
         // edits of the imported stack re-run it once over them instead of over pixels they
         // are already baked into.
-        let raster_filters_input = if !stack.filters.is_empty() { placed.as_ref().and_then(|p| self.unfiltered_surface(&p.placed)) } else { None };
+        let raster_filters_input = if !stack.filters.is_empty() { placed.as_ref().and_then(|p| self.unfiltered_surface(&p.placed, true)) } else { None };
         let cache = match (&placed, mask_shown) {
-            (Some(p), Some(m)) => {
-                let unfiltered = self.unfiltered.get(&p.placed).cloned().flatten();
-                match unfiltered {
-                    Some(u) => photocraft_compose::filter_mask::mix(&u, &stored, m),
-                    None => stored,
-                }
-            }
+            (Some(p), Some(m)) => match self.unfiltered_surface(&p.placed, false) {
+                Some(u) => photocraft_compose::filter_mask::mix(&u, &stored, m),
+                None => stored,
+            },
             _ => stored,
         };
         LayerContent::Smart(SmartObject {
