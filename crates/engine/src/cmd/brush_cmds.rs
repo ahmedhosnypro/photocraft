@@ -3,8 +3,10 @@
 //!
 //! Brushes are [`BrushSettings`] serialised as camelCase JSON; any command taking a `"brush"`
 //! object deep-merges it onto the session brush, so partial objects work
-//! (`{"scattering": {"enabled": true}}`). Strokes are deterministic: the jitter seed is the `seed`
-//! param or a hash of the points, so a journaled command replays to identical pixels.
+//! (`{"scattering": {"enabled": true}}`). The merge accepts the friendly forms the schema itself
+//! rejects (`color` as hex, a dynamic's jitter as a bare number) and refuses a key that names no
+//! setting. Strokes are deterministic: the jitter seed is the `seed` param or a hash of the points,
+//! so a journaled command replays to identical pixels.
 
 use photocraft_doc::LayerContent;
 use photocraft_geom::Rect;
@@ -112,7 +114,87 @@ fn merge(base: &mut Value, patch: &Value) {
     }
 }
 
-/// Apply a JSON brush patch onto a brush.
+/// Keys a brush patch may use that a serialised brush does not carry: serde aliases of renamed
+/// fields, and `square`, which serialises only while it is on.
+const IMPLICIT_BRUSH_KEYS: &[&str] = &["pressure_size", "pressure_opacity", "square"];
+
+/// Settings that live in a section but are easy to try at the brush's top level: where they
+/// belong, named by the refusal (they used to be dropped silently).
+const MOVED_BRUSH_KEYS: &[(&str, &str)] = &[("countJitter", "scattering.countJitter")];
+
+/// The serde aliases among [`IMPLICIT_BRUSH_KEYS`] under the names the schema serialises them: an
+/// alias emitted as-is would sit next to the camelCase field in the merged JSON, and one field
+/// spelled twice is a deserialisation error (`square` already serialises under its own name).
+const IMPLICIT_BRUSH_KEY_ALIASES: &[(&str, &str)] = &[("pressure_size", "pressureSize"), ("pressure_opacity", "pressureOpacity")];
+
+/// Rewrite the friendly forms the schema itself rejects onto it, walking `patch` against `schema`
+/// (a serialised brush): `color` also takes the top-level command's hex string, a scalar where a
+/// [`photocraft_paint::Dynamic`] is wanted becomes its `{"jitter":…}` form, and a key that names no
+/// brush setting is refused naming where it belongs, instead of being merged away silently.
+fn normalize_brush_patch(patch: &Value, schema: &Value, cmd: &str, path: &str) -> Result<Value> {
+    let Some(keys) = patch.as_object() else { return Ok(patch.clone()) };
+    let mut out = serde_json::Map::new();
+    for (k, v) in keys {
+        let here = if path.is_empty() { k.clone() } else { format!("{path}.{k}") };
+        let want = schema.get(k);
+        // A scalar where the schema holds a dynamic parameter (its jitter + control keys).
+        let dynamic = match want {
+            Some(Value::Object(d)) => d.contains_key("jitter") && d.contains_key("control"),
+            _ => false,
+        };
+        if dynamic && !v.is_object() {
+            let number = v.as_f64().filter(|n| n.is_finite());
+            let Some(jitter) = number else {
+                return Err(bad(cmd, format!("`{here}` takes a number or a {{\"jitter\":number,…}} object")));
+            };
+            out.insert(k.clone(), json!({ "jitter": jitter }));
+            continue;
+        }
+        // Implicit keys are accepted only at the brush ROOT (the PR's review fix): nested inside a
+        // section (`{"scattering": {"square": true}}`) they name no setting there and are refused.
+        if want.is_none() && (!path.is_empty() || !IMPLICIT_BRUSH_KEYS.contains(&k.as_str())) {
+            return match MOVED_BRUSH_KEYS.iter().find(|(moved, _)| *moved == k) {
+                Some((_, right)) => Err(bad(cmd, format!("`{here}` is not a brush setting: it belongs in `{right}`"))),
+                None => Err(bad(cmd, format!("unknown brush setting `{here}`"))),
+            };
+        }
+        // The command's friendly color forms, as the top-level `color` takes them.
+        if here == "color" {
+            match v {
+                Value::String(h) => {
+                    let c = crate::cmd::params::parse_hex(h).ok_or_else(|| bad(cmd, "`color` must be \"#rrggbb\" or [r, g, b, a] floats in 0..1"))?;
+                    out.insert(k.clone(), json!(c));
+                    continue;
+                }
+                _ => {
+                    out.insert(k.clone(), v.clone());
+                    continue;
+                }
+            }
+        }
+        // An object merges key by key; another variant of an externally tagged enum replaces the
+        // old one wholesale.
+        if let Some(sv) = want {
+            match (sv, v) {
+                (Value::Object(s), Value::Object(p)) if s.len() != 1 || p.len() != 1 || s.keys().next() == p.keys().next() => {
+                    out.insert(k.clone(), normalize_brush_patch(v, sv, cmd, &here)?);
+                }
+                _ => {
+                    out.insert(k.clone(), v.clone());
+                }
+            }
+        } else {
+            // An implicit key is emitted under the name the schema serialises it as (the review's
+            // alias note), never its alias.
+            let key = IMPLICIT_BRUSH_KEY_ALIASES.iter().find(|(from, _)| *from == k.as_str()).map(|(_, to)| *to).unwrap_or(k.as_str());
+            out.insert(key.to_string(), v.clone());
+        }
+    }
+    Ok(Value::Object(out))
+}
+
+/// Apply a JSON brush patch onto a brush: the patch is normalised onto the brush schema first
+/// (friendly forms rewritten, a misplaced or unknown key refused), then deep-merged.
 pub fn merge_brush(base: &BrushSettings, patch: &Value, cmd: &str) -> Result<BrushSettings> {
     // Bitmaps the patch doesn't touch (sampled tips, pattern tiles: up to megabytes of base64) skip
     // the JSON round trip, so a Brush Settings slider on an imported tip stays cheap.
@@ -132,7 +214,8 @@ pub fn merge_brush(base: &BrushSettings, patch: &Value, cmd: &str) -> Result<Bru
     let dual_tip = (!touches(&["dualBrush", "tip"])).then(|| std::mem::take(&mut light.dual_brush.tip));
     let pattern = (!touches(&["texture", "pattern"])).then(|| std::mem::take(&mut light.texture.pattern));
     let mut v = serde_json::to_value(&light).map_err(|e| bad(cmd, e.to_string()))?;
-    merge(&mut v, patch);
+    let patch = normalize_brush_patch(patch, &v, cmd, "")?;
+    merge(&mut v, &patch);
     // A legacy command sets both axes. The base JSON already has the new keys,
     // so copy the alias into axes the patch didn't set before deserialising it.
     if let Some(pose_patch) = patch.get("pose").and_then(Value::as_object)
@@ -1305,7 +1388,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "tools.setBrush",
             "Set Brush",
-            r##"{"preset":name?,"reset":bool?,…BrushSettings fields (camelCase, deep-merged; pose.overrideTiltX/Y:bool; pose.overrideTilt:legacy combined alias)}"##,
+            r##"{"preset":name?,"reset":bool?,…BrushSettings fields (camelCase, deep-merged; `color` also "#rrggbb", a dynamic field also its jitter number, an unknown key refused; pose.overrideTiltX/Y:bool; pose.overrideTilt:legacy combined alias)}"##,
             always,
             set_brush,
             true
