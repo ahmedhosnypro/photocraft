@@ -2168,7 +2168,7 @@ fn prefs_preview_mirrors_without_flipping_the_app() {
 fn switching_language_to_arabic_flips_prefs_same_frame() {
     use egui_kittest::Harness;
     let (mut app, _) = app_with_store();
-    open_preferences(&mut app, "general");
+    let id = open_preferences(&mut app, "general");
     let mut h = Harness::builder().with_size(vec2(1280.0, 800.0)).build_eframe(move |cc| {
         PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
         app
@@ -2178,6 +2178,12 @@ fn switching_language_to_arabic_flips_prefs_same_frame() {
         eprintln!("skipping: the Arabic font is missing (build with CRAFT_FONTS_DIR)");
         return;
     }
+    // The dialog draws in the language it is editing, so Arabic is picked in its values.
+    let mut values = h.state_mut().ui.dialog_mut(id).unwrap().fields.get("values").cloned().unwrap();
+    values["interface"]["language"] = json!("ar");
+    h.state_mut().ui.dialog_mut(id).unwrap().fields.insert("values".into(), values);
+    h.run_steps(4);
+    // Saving that language flips the app itself.
     h.state_mut().run("prefs.set", json!({"path": "interface.language", "value": "ar"})).unwrap();
     h.run_steps(4);
     assert!(app_is_rtl(&h), "the app follows the language it was given");
@@ -2368,7 +2374,7 @@ fn rtl_prefs_labels_share_their_reading_start_edge() {
     });
     h.run_steps(4);
     let language = h.query_all_by_role_and_label(Role::Label, "Language").next().expect("the Language label").rect();
-    let scale = h.query_all_by_role_and_label(Role::Label, "UI Scale").next().expect("the UI Scale label").rect();
+    let scale = h.query_all_by_role_and_label(Role::Label, "UI scale").next().expect("the UI scale label").rect();
     assert!((language.right() - scale.right()).abs() < 0.5, "the labels share their right edge: {language:?} {scale:?}");
 }
 
@@ -2385,7 +2391,7 @@ fn ltr_prefs_labels_share_their_reading_start_edge() {
     });
     h.run_steps(4);
     let language = h.query_all_by_role_and_label(Role::Label, "Language").next().expect("the Language label").rect();
-    let scale = h.query_all_by_role_and_label(Role::Label, "UI Scale").next().expect("the UI Scale label").rect();
+    let scale = h.query_all_by_role_and_label(Role::Label, "UI scale").next().expect("the UI scale label").rect();
     assert!((language.left() - scale.left()).abs() < 0.5, "the labels keep their left edge: {language:?} {scale:?}");
 }
 
@@ -2403,7 +2409,7 @@ fn rtl_prefs_bool_row_sits_at_the_reading_start() {
         app
     });
     h.run_steps(4);
-    let checkbox = h.query_all_by_role_and_label(Role::CheckBox, "Show Tooltips").next().expect("the Show Tooltips checkbox").rect();
+    let checkbox = h.query_all_by_role_and_label(Role::CheckBox, "Show tooltips").next().expect("the Show tooltips checkbox").rect();
     let language = h.query_all_by_role_and_label(Role::Label, "Language").next().expect("the Language label").rect();
     assert!((checkbox.right() - language.right()).abs() < 1.0, "the checkbox shares the labels' reading-start edge: {checkbox:?} {language:?}");
 }
@@ -2421,8 +2427,27 @@ fn ltr_prefs_bool_row_keeps_its_place() {
         app
     });
     h.run_steps(4);
-    let checkbox = h.query_all_by_role_and_label(Role::CheckBox, "Show Tooltips").next().expect("the Show Tooltips checkbox").rect();
+    let checkbox = h.query_all_by_role_and_label(Role::CheckBox, "Show tooltips").next().expect("the Show tooltips checkbox").rect();
     let language = h.query_all_by_role_and_label(Role::Label, "Language").next().expect("the Language label").rect();
     assert!(checkbox.left() >= language.left(), "the checkbox keeps its place at the left edge: {checkbox:?} {language:?}");
     assert!(checkbox.left() - language.left() < 32.0, "the checkbox hugs the left edge: {checkbox:?} {language:?}");
+}
+
+#[test]
+fn debug_dump_general_nodes() {
+    use egui::accesskit::Role;
+    use egui_kittest::{Harness, kittest::Queryable};
+    let (mut app, _) = app_with_store();
+    open_preferences(&mut app, "general");
+    let mut h = Harness::builder().with_size(vec2(1280.0, 800.0)).build_eframe(move |cc| {
+        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+        app
+    });
+    h.run_steps(4);
+    for n in h.query_all_by_role(Role::Label) {
+        println!("LABEL {n:?} {:?}", n.rect());
+    }
+    for n in h.query_all_by_role(Role::CheckBox) {
+        println!("CHECK {n:?} {:?}", n.rect());
+    }
 }
