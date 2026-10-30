@@ -350,23 +350,27 @@ mod tests {
         (caption, field)
     }
 
+    /// The editor context the harnesses build.
+    fn test_cx() -> EditorCx {
+        EditorCx {
+            mem: egui::Id::unique("editor"),
+            hist: None,
+            gray: false,
+            swatches: [[0.0; 3]; 2],
+            gradients: Vec::new(),
+            dialog: true,
+            dynamic_color_sliders: true,
+            isolated_curve: None,
+        }
+    }
+
     /// An adjustment editor with hand-built rows, drawn in `dir`; the editor's own body scope
     /// mirrors them.
     fn editor_harness(dir: Dir, editor: fn(&mut egui::Ui, &mut Value, &EditorCx) -> Edit) -> Harness<'static, Value> {
         let _dir = direction_scope(dir);
         let mut h = Harness::builder().with_size(egui::vec2(420.0, 300.0)).build_ui_state(
             move |ui, v: &mut Value| {
-                let cx = EditorCx {
-                    mem: egui::Id::unique("editor"),
-                    hist: None,
-                    gray: false,
-                    swatches: [[0.0; 3]; 2],
-                    gradients: Vec::new(),
-                    dialog: true,
-                    dynamic_color_sliders: true,
-                    isolated_curve: None,
-                };
-                editor(ui, v, &cx);
+                editor(ui, v, &test_cx());
             },
             json!({}),
         );
@@ -456,24 +460,34 @@ mod tests {
         assert_row_mirrors(color_balance, (egui::accesskit::Role::RadioButton, "Shadows"), (egui::accesskit::Role::RadioButton, "Highlights"));
     }
 
-    /// Whether the "medium" font family can draw in this environment: the Black & White Tint
-    /// row's Default button renders in it, and a test font set may leave the family without a
-    /// usable face (the same guard idea as adjust_editors/ui_tests.rs).
-    fn medium_family_renders() -> bool {
-        let ctx = egui::Context::default();
-        crate::PhotocraftApp::setup_context(&ctx, Default::default());
-        let mut out = ctx.run(egui::RawInput::default(), |_| {});
-        out.textures_delta.clear();
-        ctx.fonts_mut(|f| f.has_glyph(&crate::theme::medium(12.0), 'D'))
-    }
-
-    /// The Black & White Tint row: the Tint checkbox first, the Default button last.
+    /// The Black & White Tint row: the Tint checkbox first, the Default button last. Skipped
+    /// where the "medium" font family has no faces, as the other editor tests do.
     #[test]
     fn black_white_tint_row_mirrors_under_rtl() {
-        if !medium_family_renders() {
-            return;
+        fn harness(dir: Dir) -> Option<Harness<'static, Value>> {
+            let _dir = direction_scope(dir);
+            let mut h = Harness::builder().with_size(egui::vec2(420.0, 300.0)).build_ui_state(
+                move |ui, v: &mut Value| {
+                    black_white(ui, v, &test_cx());
+                },
+                json!({}),
+            );
+            crate::PhotocraftApp::setup_context(&h.ctx, Default::default());
+            if !h.ctx.fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                return None;
+            }
+            h.run_steps(4);
+            Some(h)
         }
-        assert_row_mirrors(black_white, (egui::accesskit::Role::CheckBox, "Tint"), (egui::accesskit::Role::Button, "Default"));
+        let (Some(ltr), Some(rtl)) = (harness(Dir::Ltr), harness(Dir::Rtl)) else {
+            return;
+        };
+        let check = egui::accesskit::Role::CheckBox;
+        let button = egui::accesskit::Role::Button;
+        let (fl, ll) = (rect_of(&ltr, check, "Tint"), rect_of(&ltr, button, "Default"));
+        assert!(fl.left() < ll.left(), "LTR reads left to right: {fl:?} {ll:?}");
+        let (fr, lr) = (rect_of(&rtl, check, "Tint"), rect_of(&rtl, button, "Default"));
+        assert!(fr.left() > lr.left(), "RTL reads right to left: {fr:?} {lr:?}");
     }
 
     /// The Photo Filter row: the "Filter:" radio first, the dropdown last.
