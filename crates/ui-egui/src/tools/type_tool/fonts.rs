@@ -935,4 +935,39 @@ mod rtl_tests {
             }
         }
     }
+
+    /// The axis row mirrors like the app body does: the value field sits at the row's reading
+    /// end — right of the label in a left-to-right UI, left of it in a right-to-left one.
+    #[test]
+    fn the_axis_value_field_sits_at_the_reading_end() {
+        struct AxisRow {
+            value: f32,
+            label: egui::Rect,
+            field: egui::Rect,
+        }
+        for dir in [crate::direction::Dir::Ltr, crate::direction::Dir::Rtl] {
+            let rtl = dir == crate::direction::Dir::Rtl;
+            let _scope = crate::direction::direction_scope(dir);
+            let state = AxisRow { value: 400.0, label: egui::Rect::NOTHING, field: egui::Rect::NOTHING };
+            let mut h = Harness::builder().with_size(vec2(400.0, 200.0)).build_ui_state(
+                |ui, s: &mut AxisRow| {
+                    ui.with_layout(crate::direction::body_layout(), |ui| {
+                        ui.horizontal(|ui| {
+                            let label = ui.label("Weight");
+                            let field =
+                                ui.with_layout(crate::direction::trailing(), |ui| crate::widgets::value_field(ui, &mut s.value, 100.0..=900.0, "", 74.0)).inner;
+                            s.label = label.rect;
+                            s.field = field.rect;
+                        });
+                    });
+                },
+                state,
+            );
+            // The app sets the egui flag from the direction (theme::apply); flip only that.
+            h.ctx.all_styles_mut(|s| s.set_right_to_left(rtl));
+            h.run();
+            let s = h.state();
+            assert_eq!(s.field.center().x > s.label.center().x, !rtl, "{dir:?}: label {:?} vs field {:?}", s.label, s.field);
+        }
+    }
 }
