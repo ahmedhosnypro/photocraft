@@ -74,12 +74,10 @@ mod tests {
         let mut fields = Map::new();
         fields.insert("message".into(), json!("Changed on disk"));
         let area = std::cell::Cell::new(egui::Rect::ZERO);
-        let mut h = egui_kittest::Harness::builder()
-            .with_size(egui::vec2(400.0, 200.0))
-            .build_ui(|ui| {
-                area.set(ui.max_rect());
-                body(ui, &fields);
-            });
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(400.0, 200.0)).build_ui(|ui| {
+            area.set(ui.max_rect());
+            body(ui, &fields);
+        });
         h.run();
         (h.get_by_label("Changed on disk").rect(), area.get())
     }
@@ -88,13 +86,7 @@ mod tests {
     fn the_prompt_reads_from_the_reading_start() {
         let (ltr, ltr_area) = message(crate::text::direction::Dir::Ltr);
         let (rtl, rtl_area) = message(crate::text::direction::Dir::Rtl);
-        assert!(
-            (ltr.left() - ltr_area.left()).abs() < 1.0,
-            "left-to-right: the message starts at the left edge: {ltr:?} in {ltr_area:?}"
-        );
-        assert!(
-            (rtl.right() - rtl_area.right()).abs() < 1.0,
-            "right-to-left: the message ends at the right edge: {rtl:?} in {rtl_area:?}"
-        );
+        assert!((ltr.left() - ltr_area.left()).abs() < 1.0, "left-to-right: the message starts at the left edge: {ltr:?} in {ltr_area:?}");
+        assert!((rtl.right() - rtl_area.right()).abs() < 1.0, "right-to-left: the message ends at the right edge: {rtl:?} in {rtl_area:?}");
     }
 }
