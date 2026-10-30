@@ -32,18 +32,38 @@ pub fn confirm(app: &mut PhotocraftApp, f: &Map<String, Value>) -> Result<Value,
     app.run(COMMAND, json!({"name": f.get("name"), "from": f.get("from")}))
 }
 
+/// A caption in a fixed column that hugs the field it names: the box's right edge in a
+/// left-to-right UI, its left edge in a right-to-left one.
+fn caption_anchor(r: egui::Rect, rtl: bool) -> (egui::Pos2, Align2) {
+    if rtl {
+        (pos2(r.left() + 6.0, r.center().y), Align2::LEFT_CENTER)
+    } else {
+        (pos2(r.right() - 6.0, r.center().y), Align2::RIGHT_CENTER)
+    }
+}
+
 fn label(ui: &mut egui::Ui, text: &str) {
     let t = Tokens::get(ui.ctx());
     let (r, _) = ui.allocate_exact_size(vec2(64.0, 22.0), Sense::hover());
-    ui.painter().text(pos2(r.right() - 6.0, r.center().y), Align2::RIGHT_CENTER, text, egui::FontId::proportional(12.0), t.text_dim);
+    let (pos, align) = caption_anchor(r, crate::direction::is_rtl());
+    ui.painter().text(pos, align, text, egui::FontId::proportional(12.0), t.text_dim);
 }
 
 pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     ui.spacing_mut().item_spacing.y = 6.0;
+    // One direction-aware body: in a left-to-right UI the layout is egui's default, so nothing
+    // moves; in a right-to-left one the rows read from the right and every field follows its
+    // caption.
+    ui.with_layout(crate::direction::body_layout(), |ui| body_fields(ui, f));
+}
+
+/// The New Snapshot dialog's fields.
+fn body_fields(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     ui.horizontal(|ui| {
         label(ui, tl!("Name:"));
         let mut name = f.get("name").and_then(Value::as_str).unwrap_or_default().to_string();
-        let r = ui.add(egui::TextEdit::singleline(&mut name).desired_width(260.0));
+        let mut r = ui.add(egui::TextEdit::singleline(&mut name).desired_width(260.0));
+        r = r.accessible_name(tl!("Name:"));
         // Opens on the name, selected, so typing replaces it (Photoshop).
         if !ui.is_sizing_pass() && !f.contains_key("__named") {
             r.request_focus();
@@ -68,4 +88,82 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
             f.insert("from".into(), json!(from));
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui_kittest::kittest::Queryable;
+
+    /// The dialog's field state, plus the column it was drawn in.
+    type State = (Map<String, Value>, egui::Rect);
+
+    /// The body drawn in `dir`, with the column it draws in.
+    fn harness(dir: crate::direction::Dir) -> (egui_kittest::Harness<'static, State>, egui::Rect) {
+        let _dir = crate::direction::direction_scope(dir);
+        let mut f = Map::new();
+        f.insert("name".into(), json!("Snapshot 1"));
+        f.insert("__named".into(), json!(true));
+        let mut h = egui_kittest::Harness::builder()
+            .with_size(vec2(400.0, 120.0))
+            .with_context_setup(|ctx| crate::PhotocraftApp::setup_context(ctx, crate::theme::ThemeKind::ALL[0]))
+            .build_ui_state(
+                |ui, s: &mut State| {
+                    s.1 = ui.max_rect();
+                    body(ui, &mut s.0);
+                },
+                (f, egui::Rect::ZERO),
+            );
+        h.run_steps(2);
+        let col = h.state().1;
+        (h, col)
+    }
+
+    /// The name field's rect, the "Name:" caption's edge that hugs it, and the column they are
+    /// drawn in.
+    fn probe(dir: crate::direction::Dir) -> (egui::Rect, f32, egui::Rect) {
+        let (h, col) = harness(dir);
+        let field = h.get_by_role(egui::accesskit::Role::TextInput).rect();
+        let (left, width) = h
+            .output()
+            .shapes
+            .iter()
+            .find_map(|clipped| match &clipped.shape {
+                egui::Shape::Text(t) if t.galley.text() == "Name:" => Some((t.pos.x, t.galley.size().x)),
+                _ => None,
+            })
+            .expect("the caption is painted");
+        // The caption hugs the field: its right edge in a left-to-right row, its left in a
+        // mirrored one.
+        let caption = if dir == crate::direction::Dir::Rtl { left } else { left + width };
+        (field, caption, col)
+    }
+
+    /// Photoshop Arabic: the rows read from the right — the caption comes first in reading
+    /// order and the field follows it, the exact mirror of the left-to-right dialog.
+    #[test]
+    fn the_rows_read_mirrored_under_rtl() {
+        let (ltr_field, ltr_caption, ltr_col) = probe(crate::direction::Dir::Ltr);
+        let (rtl_field, rtl_caption, rtl_col) = probe(crate::direction::Dir::Rtl);
+        // The caption comes before the field in a left-to-right row and after it in a mirrored one.
+        assert!(ltr_field.left() - ltr_col.left() > 50.0, "LTR: the caption comes before the field: {ltr_field:?} in {ltr_col:?}");
+        assert!(rtl_col.right() - rtl_field.right() > 50.0, "RTL: the caption comes after the field: {rtl_field:?} in {rtl_col:?}");
+        // The field and the caption mirror about the column's centre.
+        let centre = ltr_col.left() + rtl_col.right();
+        assert!((ltr_field.left() + rtl_field.right() - centre).abs() < 1.0, "the field mirrors: {ltr_field:?} / {rtl_field:?}");
+        assert!((ltr_caption + rtl_caption - centre).abs() < 1.0, "the caption mirrors: {ltr_caption} / {rtl_caption}");
+    }
+
+    /// The caption in its fixed column hugs the field it names: the box's right edge in a
+    /// left-to-right row, its left edge in a mirrored one.
+    #[test]
+    fn the_caption_hugs_its_field() {
+        let r = egui::Rect::from_min_size(pos2(10.0, 0.0), vec2(64.0, 22.0));
+        let (ltr_pos, ltr_align) = caption_anchor(r, false);
+        assert!(matches!(ltr_align, Align2::RIGHT_CENTER), "the caption is right-aligned: {ltr_align:?}");
+        assert!((ltr_pos.x - (r.right() - 6.0)).abs() < 0.01, "the caption sits at the right of its box: {ltr_pos:?}");
+        let (rtl_pos, rtl_align) = caption_anchor(r, true);
+        assert!(matches!(rtl_align, Align2::LEFT_CENTER), "the caption is left-aligned: {rtl_align:?}");
+        assert!((rtl_pos.x - (r.left() + 6.0)).abs() < 0.01, "the caption sits at the left of its box: {rtl_pos:?}");
+    }
 }
