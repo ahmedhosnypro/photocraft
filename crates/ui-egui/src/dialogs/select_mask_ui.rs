@@ -1491,25 +1491,34 @@ fn upload(app: &mut PhotocraftApp, ctx: &egui::Context) {
 
 /// A section of the Properties panel: a bold title that folds it, open by default.
 fn section(ui: &mut egui::Ui, id: &str, title: &str, body: impl FnOnce(&mut egui::Ui)) {
-    if !crate::text::direction::is_rtl() {
+    // Branch on the same flag the fork's header row reads, so the two can never disagree when
+    // the thread-local direction and the ctx flag diverge.
+    if !ui.style().right_to_left {
         egui::CollapsingHeader::new(egui::RichText::new(title).strong()).id_salt(id).default_open(true).show(ui, body);
         return;
     }
     // egui's CollapsingHeader pins its own vertical scope to Align::Min, so its title would
     // stay at the panel's left. CollapsingState's header row leads with the fold arrow on the
     // reading-start edge, and the body inherits the panel's mirrored layout.
-    let state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id(egui::IdSalt::new(id)), true);
-    let mut title_clicked = false;
-    let mut header = state.show_header(ui, |ui| {
+    let id = ui.make_persistent_id(egui::IdSalt::new(id));
+    let state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true);
+    let mut toggled = state.clone();
+    let header = state.show_header(ui, |ui| {
         // The fork's own header starts its text right at the arrow slot (item_spacing.x = 0).
         ui.spacing_mut().item_spacing.x = 0.0;
-        let response = ui.add(egui::Label::new(egui::RichText::new(title).strong()).sense(egui::Sense::click()));
-        title_clicked = response.clicked();
+        ui.add(egui::Label::new(egui::RichText::new(title).strong()).sense(egui::Sense::click()));
     });
-    if title_clicked {
-        header.toggle();
+    let (toggle, header_inner, body_response) = header.body(body);
+    // Keep what CollapsingHeader's own header publishes: one whole-row clickable widget that
+    // carries the disclosure role and the expanded state.
+    let row = header_inner.response.interact(egui::Sense::click());
+    if toggle.clicked() || row.clicked() {
+        toggled.toggle(ui);
+        toggled.store(ui.ctx());
     }
-    let _ = header.body(body);
+    row.widget_info(|| egui::WidgetInfo::labeled(egui::Role::DisclosureTriangle, ui.is_enabled(), title));
+    ui.ctx().accesskit_node_builder(row.id, |node| node.set_expanded(toggled.is_open()));
+    let _ = body_response;
 }
 
 /// The options bar of the current tool.
@@ -1563,7 +1572,10 @@ fn properties(ui: &mut egui::Ui, w: &mut SelectMaskWorkspace, t: &Tokens) -> Opt
     widgets::hairline(ui);
     section(ui, "sm-view", tl!("View Mode"), |ui| {
         ui.horizontal_top(|ui| {
-            ui.vertical(|ui| {
+            // Ui::vertical always lays out top_down(Align::Min), which in a mirrored row paints
+            // the column at the row's far edge while its width is reserved at the reading start;
+            // a body_layout scope puts the content at the column's reading-start edge instead.
+            ui.scope_builder(egui::UiBuilder::new().layout(crate::text::direction::body_layout()), |ui| {
                 ui.label(egui::RichText::new(tl!("View")).color(t.text_dim));
                 let labels: Vec<String> = Mode::ALL.iter().map(|m| format!("{} ({:?})", m.label(), m.key())).collect();
                 let options: Vec<(Mode, &str)> = Mode::ALL.iter().zip(&labels).map(|(m, l)| (*m, l.as_str())).collect();
@@ -1573,7 +1585,7 @@ fn properties(ui: &mut egui::Ui, w: &mut SelectMaskWorkspace, t: &Tokens) -> Opt
             // Beside the view list, as Photoshop's; long labels are cut rather than widening the
             // panel past its edge (every row below lines up on that edge).
             let room = ui.available_width();
-            ui.vertical(|ui| {
+            ui.scope_builder(egui::UiBuilder::new().layout(crate::text::direction::body_layout()), |ui| {
                 ui.set_max_width(room);
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
                 widgets::checkbox(ui, &mut w.opts.show_edge, &format!("{} (J)", tl!("Show Edge")));

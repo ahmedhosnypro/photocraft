@@ -807,6 +807,52 @@ fn workspace_harness(app: PhotocraftApp) -> egui_kittest::Harness<'static, Photo
     h
 }
 
+/// The painted rect of a painter-drawn text (not an egui widget): the document tab's title and
+/// the Properties panel's head label.
+fn painted_text_rect(h: &egui_kittest::Harness<'_, PhotocraftApp>, text: &str) -> egui::Rect {
+    h.output()
+        .shapes
+        .iter()
+        .filter_map(|s| match &s.shape {
+            egui::Shape::Text(ts) if ts.galley.text() == text => Some(s.shape.visual_bounding_rect()),
+            _ => None,
+        })
+        .next()
+        .unwrap_or_else(|| panic!("no painted text {text:?}"))
+}
+
+/// The active document tab's painted rect: the only canvas-coloured rect of tab height.
+fn active_tab_rect(h: &egui_kittest::Harness<'_, PhotocraftApp>) -> egui::Rect {
+    let canvas = crate::theme::Tokens::get(&h.ctx).canvas;
+    h.output()
+        .shapes
+        .iter()
+        .filter_map(|s| match &s.shape {
+            egui::Shape::Rect(r) if r.fill == canvas && r.rect.height() == TAB_H => Some(r.rect),
+            _ => None,
+        })
+        .next()
+        .expect("the active document tab")
+}
+
+/// The Lasso slot's flyout triangle — the only 3-point path hugging the Lasso button — as its
+/// (min_x, max_x) span.
+fn flyout_triangle_x(h: &egui_kittest::Harness<'_, PhotocraftApp>, lasso: egui::Rect) -> (f32, f32) {
+    h.output()
+        .shapes
+        .iter()
+        .filter_map(|s| match &s.shape {
+            egui::Shape::Path(p) if p.points.len() == 3 && p.points.iter().all(|pt| (pt.x - lasso.center().x).abs() < 40.0) => {
+                let min = p.points.iter().map(|pt| pt.x).fold(f32::MAX, f32::min);
+                let max = p.points.iter().map(|pt| pt.x).fold(f32::MIN, f32::max);
+                Some((min, max))
+            }
+            _ => None,
+        })
+        .next()
+        .expect("the Lasso slot's flyout triangle")
+}
+
 /// Left-to-right: the tools on the left, the Properties panel on the right, and the footer's OK
 /// and Cancel against the right edge with Reset at the left.
 #[test]
@@ -828,8 +874,26 @@ fn ltr_keeps_the_workspace_layout() {
     let object_aware = h.get_by_label("Object Aware").rect();
     assert!(color_aware.left() < object_aware.left(), "the panel's rows read left to right: {color_aware:?} {object_aware:?}");
     // The folding section titles hug the panel's left edge, as the fork's CollapsingHeader draws them.
-    let refine = h.get_by_label("Refine Mode").rect();
+    let refine = h.get_by_role_and_label(egui::accesskit::Role::DisclosureTriangle, "Refine Mode").rect();
     assert!(refine.left() > 1000.0 && refine.left() < 1100.0, "the section title hugs the panel's left edge: {refine:?}");
+    // The View Mode section's two columns sit side by side, not on top of each other: the view
+    // dropdown is left of the checkbox column.
+    let view = h.query_by_value("Onion Skin (O)").expect("the view dropdown").rect();
+    let show_edge = h.query_by_label_contains("Show Edge").expect("the checkbox").rect();
+    assert!(view.right() < show_edge.left(), "the view dropdown is left of the checkbox column: {view:?} {show_edge:?}");
+    // The active document tab hugs the document area's left edge.
+    let tab = active_tab_rect(&h);
+    assert!(tab.left() < 100.0 && tab.width() < 400.0, "the active tab is at the left edge: {tab:?}");
+    // The Properties head label starts 12 pt in from the panel head's left edge.
+    let head = painted_text_rect(&h, "Properties");
+    assert!(head.left() > 1000.0 && head.left() < 1100.0, "the head label hugs the panel's left edge: {head:?}");
+    // The Lasso slot's flyout triangle points right from the button's right edge.
+    let lasso = h.get_by_label("Lasso Tool (L)").rect();
+    let (tri_min, tri_max) = flyout_triangle_x(&h, lasso);
+    assert!(
+        (tri_max - (lasso.right() - 3.0)).abs() < 1.0 && (tri_min - (lasso.right() - 8.0)).abs() < 1.0,
+        "the flyout points right from the button's right edge: {tri_min}..{tri_max} vs {lasso:?}"
+    );
 }
 
 /// Right-to-left: the chrome mirrors — the tools on the right, the Properties panel on the left,
@@ -858,7 +922,29 @@ fn rtl_mirrors_the_workspace_chrome() {
     let object_aware = h.get_by_label("Object Aware").rect();
     assert!(color_aware.left() > object_aware.right(), "the panel's rows mirror: {color_aware:?} {object_aware:?}");
     // The folding section titles lead with the arrow at the panel's reading-start (right) edge,
-    // where the fork's CollapsingHeader would leave them at the left.
-    let refine = h.get_by_label("Refine Mode").rect();
+    // where the fork's CollapsingHeader would leave them at the left. The RTL header publishes
+    // the same DisclosureTriangle role as LTR's CollapsingHeader, plus the inner label node.
+    let refine = h.get_by_role_and_label(egui::accesskit::Role::DisclosureTriangle, "Refine Mode").rect();
     assert!(refine.right() > 300.0 && refine.right() <= 352.0, "the section title hugs the panel's right edge: {refine:?}");
+    // The View Mode section's two columns sit side by side in RTL too: the view dropdown is
+    // right of the checkbox column and the two do not overlap.
+    let view = h.query_by_value("Onion Skin (O)").expect("the view dropdown").rect();
+    let mut cb_right = f32::MIN;
+    for label in ["Show Edge", "Show Original", "Real-Time Refinement", "High Quality Preview"] {
+        cb_right = cb_right.max(h.query_by_label_contains(label).expect("the checkbox").rect().right());
+    }
+    assert!(view.left() > cb_right, "the view dropdown is right of the checkbox column: {view:?} cb_right={cb_right}");
+    // The active document tab hugs the document area's right edge.
+    let tab = active_tab_rect(&h);
+    assert!(tab.right() > 1300.0 && tab.width() < 400.0, "the active tab is at the right edge: {tab:?}");
+    // The Properties head label ends 12 pt before the panel head's right edge.
+    let head = painted_text_rect(&h, "Properties");
+    assert!(head.right() > 300.0 && head.right() <= 350.0, "the head label hugs the panel's right edge: {head:?}");
+    // The Lasso slot's flyout triangle points left from the button's left edge.
+    let lasso = h.get_by_label("Lasso Tool (L)").rect();
+    let (tri_min, tri_max) = flyout_triangle_x(&h, lasso);
+    assert!(
+        (tri_min - (lasso.left() + 3.0)).abs() < 1.0 && (tri_max - (lasso.left() + 8.0)).abs() < 1.0,
+        "the flyout points left from the button's left edge: {tri_min}..{tri_max} vs {lasso:?}"
+    );
 }
