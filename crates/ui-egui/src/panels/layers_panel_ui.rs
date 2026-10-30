@@ -265,7 +265,7 @@ pub fn show_dialog(app: &mut PhotocraftApp, ctx: &Context) {
         // One direction-aware body: in LTR `body_layout()` is the Modal's own layout, so nothing
         // moves; in RTL the blocks right-align and every nested row mirrors.
         ui.scope_builder(egui::UiBuilder::new().max_rect(ui.max_rect()).layout(crate::direction::body_layout()), |ui| {
-            dialog_body(ui, &mut dialog, &title, &mut confirmed, &mut cancelled);
+            dialog_body(ui, &mut dialog, title, &mut confirmed, &mut cancelled);
         });
     });
     if confirmed && !cancelled {
