@@ -320,7 +320,7 @@ fn node(h: &Harness<'static, PhotocraftApp>, label: &str) -> egui::Rect {
 /// The node labelled `label` inside `window`: the label alone is not unique — the document
 /// tab's close button is labelled `Close` too, and it is drawn first.
 fn node_in(h: &Harness<'static, PhotocraftApp>, window: egui::Rect, label: &str) -> egui::Rect {
-    h.query_all_by_label(label).filter(|n| window.contains(n.rect().center())).next().unwrap_or_else(|| panic!("`{label}` drawn inside the window")).rect()
+    h.query_all_by_label(label).find(|n| window.contains(n.rect().center())).unwrap_or_else(|| panic!("`{label}` drawn inside the window")).rect()
 }
 
 /// The Measurement Log opens 16 px inside the canvas's reading-end edge, 300 px away from
