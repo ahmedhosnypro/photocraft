@@ -190,7 +190,10 @@ pub fn owns(fields: &Map<String, Value>) -> bool {
 pub fn body(ui: &mut egui::Ui, f: &Map<String, Value>) {
     let t = crate::theme::Tokens::get(ui.ctx());
     let text = f.get("message").and_then(Value::as_str).unwrap_or("This layer must be rasterized before proceeding.");
-    ui.horizontal_top(|ui| {
+    // The caution mark leads the row — left in LTR, right in RTL. The dialog body stays
+    // `top_down(Align::Min)`, so the row's direction must be explicit (LTR: today's layout).
+    let size = ui.available_size_before_wrap();
+    ui.allocate_ui_with_layout(size, crate::text::direction::row().with_cross_align(egui::Align::Min), |ui| {
         ui.spacing_mut().item_spacing.x = 12.0;
         let (r, _) = ui.allocate_exact_size(egui::vec2(32.0, 32.0), egui::Sense::hover());
         crate::icons::paint(ui, r, "triangle-alert", 30.0, t.warning);
@@ -244,6 +247,38 @@ pub fn run_pending(app: &mut PhotocraftApp, ctx: &egui::Context) {
     if let Err(e) = crate::menus::invoke(app, ctx, &filter, params) {
         app.ui.status = e;
         app.ui.status_error = true;
+    }
+}
+
+#[cfg(test)]
+mod rtl_tests {
+    use serde_json::json;
+
+    use super::body;
+    use crate::text::direction::{Dir, direction_scope};
+
+    /// The caution mark leads the row: on the left in LTR, on the right in RTL.
+    #[test]
+    fn the_caution_mark_leads_the_row_in_reading_order() {
+        for (dir, rtl) in [(Dir::Ltr, false), (Dir::Rtl, true)] {
+            let _scope = direction_scope(dir);
+            let mut row = None;
+            let mut frame = None;
+            let mut h = egui_kittest::Harness::new_ui(|ui| {
+                frame = Some(ui.max_rect());
+                let mut f = serde_json::Map::new();
+                f.insert("message".into(), json!("Rasterize the type?"));
+                body(ui, &f);
+                row = Some(ui.min_rect());
+            });
+            crate::PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+            h.run();
+            let (row, frame) = (row.unwrap(), frame.unwrap());
+            let lead = if rtl { frame.right() - row.right() } else { row.left() - frame.left() };
+            let trail = if rtl { row.left() - frame.left() } else { frame.right() - row.right() };
+            assert!(lead.abs() < 1.0, "{dir:?}: the mark hugs the reading start: {row:?} in {frame:?}");
+            assert!(trail > 40.0, "{dir:?}: the question sits after the mark: {row:?} in {frame:?}");
+        }
     }
 }
 
