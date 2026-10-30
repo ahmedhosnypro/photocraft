@@ -965,7 +965,7 @@ mod tests;
 mod rtl_tests {
     use super::*;
     use egui::accesskit::Role;
-    use egui_kittest::kittest::{NodeT, Queryable};
+    use egui_kittest::kittest::Queryable;
 
     /// The dialog over a small painted document, with only the dialog drawn (like the LTR
     /// tests): the caller's `direction_scope` decides the direction.
@@ -1021,19 +1021,21 @@ mod rtl_tests {
         })
     }
 
-    /// The painted rect of the stack row's eye icon: the only small image shape on the name's
-    /// row inside the effect-stack band (the pane's own icons sit outside it, the footer's in
-    /// another row).
+    /// The painted rect of the stack row's eye icon: the only small icon shape on the name's row
+    /// inside the effect-stack band (the pane's own icons sit outside it, the footer's in another row).
     fn eye_rect(h: &egui_kittest::Harness<'_, PhotocraftApp>, band: ERect, name: ERect) -> Option<ERect> {
-        h.output().shapes.iter().find_map(|s| match &s.shape {
-            egui::Shape::Mesh(m) => {
-                let mut v = m.vertices.iter().map(|v| v.pos);
-                let first = v.next()?;
-                let r = v.fold(ERect::from_min_max(first, first), |r, p| r.union(ERect::from_min_size(p, egui::Vec2::ZERO)));
-                let on_row = (r.center().y - name.center().y).abs() < 8.0;
-                (band.intersects(r) && on_row && r.width() < 20.0 && r.height() < 20.0).then_some(r)
-            }
-            _ => None,
+        h.output().shapes.iter().find_map(|s| {
+            let r = match &s.shape {
+                egui::Shape::Rect(rs) if rs.brush.is_some() => rs.rect,
+                egui::Shape::Mesh(m) => {
+                    let mut v = m.vertices.iter().map(|v| v.pos);
+                    let first = v.next()?;
+                    v.fold(ERect::from_min_max(first, first), |r, p| r.union(ERect::from_min_size(p, egui::Vec2::ZERO)))
+                }
+                _ => return None,
+            };
+            let on_row = (r.center().y - name.center().y).abs() < 8.0;
+            (band.intersects(r) && on_row && r.width() < 20.0 && r.height() < 20.0).then_some(r)
         })
     }
 
@@ -1076,5 +1078,103 @@ mod rtl_tests {
         let (eye, name_at, _) = stack_row_parts(row, true);
         assert_eq!(eye.right(), row.right() - 4.0);
         assert!(name_at.x < eye.left(), "the name follows the eye");
+    }
+
+    /// The painted thumbnail cells (the 80×56 picture/frame rects) inside `band`, sorted by
+    /// row then side.
+    fn cell_rects(h: &egui_kittest::Harness<'_, PhotocraftApp>, band: ERect) -> Vec<ERect> {
+        let mut cells: Vec<ERect> = h
+            .output()
+            .shapes
+            .iter()
+            .filter_map(|s| match &s.shape {
+                egui::Shape::Rect(rs) => {
+                    let r = rs.rect;
+                    let cell = (r.width() - THUMB[0] as f32).abs() <= 2.5 && (r.height() - THUMB[1] as f32).abs() <= 2.5 && band.contains_rect(r);
+                    cell.then_some(r)
+                }
+                _ => None,
+            })
+            .collect();
+        cells.sort_by(|a, b| a.top().total_cmp(&b.top()).then(a.left().total_cmp(&b.left())));
+        cells
+    }
+
+    /// The first thumbnail of the first open category leads from the reading start: the
+    /// right-most cell of the first row in RTL, the left-most in LTR, and clicking it applies
+    /// that filter to the selected effect layer.
+    #[test]
+    fn the_first_category_cell_leads_from_the_reading_start() {
+        for dir in [crate::direction::Dir::Ltr, crate::direction::Dir::Rtl] {
+            let _scope = crate::direction::direction_scope(dir);
+            let rtl = crate::direction::is_rtl();
+            let label = if rtl { "rtl" } else { "ltr" };
+            let mut app = gallery_app();
+            app.distort.gallery.as_mut().unwrap().set_filter(GalleryFilter::Cutout);
+            let mut h = gallery_harness(app);
+            h.run_steps(4);
+            let cells = cell_rects(&h, harness_panes(rtl).folders);
+            assert!(cells.len() >= 3, "the open category paints its thumbnails ({label}): {}", cells.len());
+            let top = cells.iter().map(|r| r.top()).fold(f32::INFINITY, f32::min);
+            let row: Vec<ERect> = cells.into_iter().filter(|r| (r.top() - top).abs() <= 2.0).collect();
+            assert!(row.len() >= 3, "the first row is full ({label}): {}", row.len());
+            let lead = if rtl { row.iter().max_by(|a, b| a.right().total_cmp(&b.right())) } else { row.iter().min_by(|a, b| a.left().total_cmp(&b.left())) }.copied().unwrap();
+            click(&mut h, lead.center());
+            let g = h.state().distort.gallery.as_ref().unwrap();
+            assert_eq!(g.effects[g.selected].filter, GalleryFilter::ColoredPencil, "the leading cell is the category's first filter ({label})");
+        }
+    }
+
+    /// The stack row works at its mirrored positions in both directions: clicking the eye icon
+    /// at the reading-start side of the row toggles that layer's visibility, clicking the
+    /// filter name selects the row.
+    #[test]
+    fn the_eye_toggles_and_the_name_selects_at_the_mirrored_positions() {
+        for dir in [crate::direction::Dir::Ltr, crate::direction::Dir::Rtl] {
+            let _scope = crate::direction::direction_scope(dir);
+            let rtl = crate::direction::is_rtl();
+            let label = if rtl { "rtl" } else { "ltr" };
+            let mut app = gallery_app();
+            let d = app.distort.gallery.as_mut().unwrap();
+            d.add();
+            d.set_filter(GalleryFilter::Cutout);
+            let mut h = gallery_harness(app);
+            h.run_steps(4);
+            let band = stack_band(rtl);
+            let name = text_rect(&h, "Colored Pencil", band).unwrap_or_else(|| panic!("the Colored Pencil row is painted ({label})"));
+            let eye = eye_rect(&h, band, name).unwrap_or_else(|| panic!("the eye icon is painted on that row ({label})"));
+            let before = h.state().distort.gallery.as_ref().unwrap().effects[0].visible;
+            click(&mut h, eye.center());
+            let g = h.state().distort.gallery.as_ref().unwrap();
+            assert_ne!(g.effects[0].visible, before, "the eye click toggles visibility ({label})");
+            click(&mut h, name.center());
+            let g = h.state().distort.gallery.as_ref().unwrap();
+            assert_eq!(g.selected, 0, "the name click selects the row ({label})");
+        }
+    }
+
+    /// The OK/Cancel pair mirrors with the direction but keeps its creation order (so Tab
+    /// order too): OK is registered and painted before Cancel in both directions, and sits at
+    /// the reading-start side in RTL.
+    #[test]
+    fn the_ok_cancel_pair_mirrors_but_keeps_its_creation_order() {
+        for dir in [crate::direction::Dir::Ltr, crate::direction::Dir::Rtl] {
+            let _scope = crate::direction::direction_scope(dir);
+            let rtl = crate::direction::is_rtl();
+            let label = if rtl { "rtl" } else { "ltr" };
+            let mut h = gallery_harness(gallery_app());
+            h.run_steps(4);
+            let ok = h.get_by_role_and_label(Role::Button, "OK").rect();
+            let cancel = h.get_by_role_and_label(Role::Button, "Cancel").rect();
+            if rtl {
+                assert!(ok.center().x > cancel.center().x, "OK leads from the right ({label}): {ok:?} {cancel:?}");
+            } else {
+                assert!(ok.center().x < cancel.center().x, "OK leads from the left ({label}): {ok:?} {cancel:?}");
+            }
+            let pos = |needle: &str| {
+                h.output().shapes.iter().position(|s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.text() == needle)).unwrap_or_else(|| panic!("the {needle} label is painted ({label})"))
+            };
+            assert!(pos("OK") < pos("Cancel"), "OK is created before Cancel in both directions ({label})");
+        }
     }
 }
