@@ -262,18 +262,18 @@ mod rtl_tests {
     fn the_caution_mark_leads_the_row_in_reading_order() {
         for (dir, rtl) in [(Dir::Ltr, false), (Dir::Rtl, true)] {
             let _scope = direction_scope(dir);
-            let mut row = None;
-            let mut frame = None;
+            let row = std::cell::Cell::new(None);
+            let frame = std::cell::Cell::new(None);
             let mut h = egui_kittest::Harness::new_ui(|ui| {
-                frame = Some(ui.max_rect());
+                frame.set(Some(ui.max_rect()));
                 let mut f = serde_json::Map::new();
                 f.insert("message".into(), json!("Rasterize the type?"));
                 body(ui, &f);
-                row = Some(ui.min_rect());
+                row.set(Some(ui.min_rect()));
             });
             crate::PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
             h.run();
-            let (row, frame) = (row.unwrap(), frame.unwrap());
+            let (row, frame) = (row.get().unwrap(), frame.get().unwrap());
             let lead = if rtl { frame.right() - row.right() } else { row.left() - frame.left() };
             let trail = if rtl { row.left() - frame.left() } else { frame.right() - row.right() };
             assert!(lead.abs() < 1.0, "{dir:?}: the mark hugs the reading start: {row:?} in {frame:?}");
