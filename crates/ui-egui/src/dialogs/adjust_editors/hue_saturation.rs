@@ -228,9 +228,15 @@ mod tests {
 
     /// The Hue/Saturation panel over a fresh adjustment, drawn in `dir` with `range` selected.
     fn harness(dir: Dir, range: usize) -> egui_kittest::Harness<'static, Value> {
-        let _dir = crate::direction::direction_scope(dir);
         let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(380.0, 420.0)).build_ui_state(
             move |ui, v: &mut Value| {
+                // The scope covers every frame, including the frames of a later gesture: the
+                // guard would otherwise die when this function returns.
+                let _dir = crate::direction::direction_scope(dir);
+                // The fonts install after the harness's first frame; skip that one.
+                if !ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    return;
+                }
                 let cx = EditorCx {
                     mem: egui::Id::unique("hs-rtl"),
                     hist: None,
@@ -260,7 +266,9 @@ mod tests {
     }
 
     /// RTL: the panel's rows read from the right and the value field sits at the reading end;
-    /// LTR keeps today's layout.
+    /// LTR keeps today's layout. The wave twin in `adjust_editors/ui_tests.rs` covers the same
+    /// caption/field pair through the public dispatch; this one owns the Range row and the
+    /// hue-range handles.
     #[test]
     fn hue_saturation_panel_mirrors_under_rtl() {
         let ltr = harness(Dir::Ltr, 0);
