@@ -277,13 +277,19 @@ fn theme_row(ui: &mut egui::Ui, title: &str, active: bool, selected: &mut String
             ui.horizontal(|ui| {
                 // Room for the favourite star badges on the swatch corners.
                 ui.spacing_mut().item_spacing.x = 6.0;
-                // The cell's row reads with the body, so the first option lands at the reading
-                // start (the right in a right-to-left UI) and the Active marker, added last,
-                // ends up at the reading end. The swatch paint itself never mirrors.
-                for (id, kind) in options {
-                    theme_swatch(ui, *kind, id, selected, favorites);
+                let rtl = crate::direction::is_rtl();
+                // A Grid cell's row stays physical, so under RTL the strip is emitted in
+                // reverse: the Active marker goes first (the reading end) and the first option
+                // ends up the rightmost one. The swatch paint itself never mirrors.
+                if rtl && active {
+                    ui.label(RichText::new(tl!("Active")).color(t.accent_text).small());
+                    ui.add_space(6.0);
                 }
-                if active {
+                for i in 0..options.len() {
+                    let (id, kind) = options[if rtl { options.len() - 1 - i } else { i }];
+                    theme_swatch(ui, kind, id, selected, favorites);
+                }
+                if !rtl && active {
                     ui.add_space(6.0);
                     ui.label(RichText::new(tl!("Active")).color(t.accent_text).small());
                 }
