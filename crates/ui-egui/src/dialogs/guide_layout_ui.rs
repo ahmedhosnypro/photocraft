@@ -227,7 +227,32 @@ fn optional(ui: &mut egui::Ui, f: &mut Map<String, Value>, key: &str, label: egu
 
 fn group<R>(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui) -> R) -> R {
     let t = Tokens::get(ui.ctx());
-    egui::Frame::new().stroke(Stroke::new(1.0, t.field_border)).inner_margin(8).show(ui, |ui| ui.vertical(content).inner).inner
+    egui::Frame::new().stroke(Stroke::new(1.0, t.field_border)).inner_margin(8).show(ui, |ui| column(ui, content)).inner
+}
+
+/// A column whose rows follow the UI direction: in a right-to-left UI its blocks sit at the
+/// reading start and the rows inside it mirror.
+fn column<R>(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    ui.scope_builder(egui::UiBuilder::new().layout(crate::direction::body_layout()), content).inner
+}
+
+/// The width of the widest of `labels`, so the editors of a settings column line up.
+fn label_width(ui: &egui::Ui, labels: &[&str]) -> f32 {
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    labels.iter().map(|l| ui.painter().layout_no_wrap((*l).to_owned(), font.clone(), Color32::WHITE).size().x).fold(0.0, f32::max)
+}
+
+/// A label beside an editor, in reading order: the label at the reading start, the editor
+/// toward the reading end. The label column keeps `label_w`, so the editors line up the way
+/// the grid they replace lined them up.
+fn settings_line(ui: &mut egui::Ui, label_w: f32, label: &str, editor: impl FnOnce(&mut egui::Ui, egui::Response)) -> egui::Response {
+    let halign = if crate::direction::is_rtl() { egui::Align::Max } else { egui::Align::Min };
+    crate::direction::dialog_row(ui, |ui| {
+        let response = ui.add_sized(egui::vec2(label_w, ui.spacing().interact_size.y), egui::Label::new(label).halign(halign));
+        editor(ui, response.clone());
+        response
+    })
+    .inner
 }
 
 fn axis(ui: &mut egui::Ui, f: &mut Map<String, Value>, rows: bool) {
@@ -243,73 +268,104 @@ fn axis(ui: &mut egui::Ui, f: &mut Map<String, Value>, rows: bool) {
         }
         ui.add_space(6.0);
         ui.add_enabled_ui(enabled, |ui| {
-            egui::Grid::new(count).spacing([8.0, 6.0]).show(ui, |ui| {
-                ui.label(tl!("Number"));
-                number(ui, f, count, "Number", true);
-                ui.end_row();
-                let size_label_resp = ui.label(size_label);
-                optional(ui, f, size, size_label_resp.id);
-                ui.end_row();
-                ui.label(tl!("Spacing"));
-                number(ui, f, gap, "Spacing", false);
-                ui.end_row();
-            });
+            if crate::direction::is_rtl() {
+                // The fork's `Grid` is not ready for right-to-left layouts (its available width
+                // goes NaN), so the rows are drawn by hand in reading order.
+                let label_w = label_width(ui, &[tl!("Number"), size_label, tl!("Spacing")]);
+                settings_line(ui, label_w, tl!("Number"), |ui, _| number(ui, f, count, "Number", true));
+                settings_line(ui, label_w, size_label, |ui, label| optional(ui, f, size, label.id));
+                settings_line(ui, label_w, tl!("Spacing"), |ui, _| number(ui, f, gap, "Spacing", false));
+            } else {
+                egui::Grid::new(count).spacing([8.0, 6.0]).show(ui, |ui| {
+                    ui.label(tl!("Number"));
+                    number(ui, f, count, "Number", true);
+                    ui.end_row();
+                    let size_label_resp = ui.label(size_label);
+                    optional(ui, f, size, size_label_resp.id);
+                    ui.end_row();
+                    ui.label(tl!("Spacing"));
+                    number(ui, f, gap, "Spacing", false);
+                    ui.end_row();
+                });
+            }
         });
     });
 }
 
+/// The preset dropdown's options.
+fn presets() -> Vec<(String, &'static str)> {
+    vec![("custom".into(), "Custom"), ("five".into(), "5 Columns, 3 Rows"), ("eight".into(), "8 Columns"), ("twelve".into(), "12 Columns")]
+}
+
+/// A named preset's starting values; a later typed edit makes the preset custom again.
+fn apply_preset(f: &mut Map<String, Value>, preset: &str) {
+    let (cols, rows, gap) = match preset {
+        "five" => (5, 3, 0),
+        "eight" => (8, 0, 20),
+        "twelve" => (12, 0, 24),
+        _ => return,
+    };
+    for (k, v) in [
+        ("columns", json!(cols)),
+        ("rows", json!(rows)),
+        ("gutter", json!(gap)),
+        ("rowGutter", json!(0)),
+        ("width", Value::Null),
+        ("height", Value::Null),
+        ("margin", json!([0, 0, 0, 0])),
+        ("__columnsEnabled", json!(true)),
+        ("__rowsEnabled", json!(rows > 0)),
+        ("__marginEnabled", json!(true)),
+        ("centerColumns", json!(false)),
+    ] {
+        f.insert(k.into(), v);
+    }
+}
+
 fn main_fields(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     let before: Map<String, Value> = f.iter().filter(|(key, _)| !key.starts_with("__preview")).map(|(k, v)| (k.clone(), v.clone())).collect();
-    egui::Grid::new("guide-header").spacing([8.0, 6.0]).show(ui, |ui| {
-        ui.label(tl!("Preset:"));
+    if crate::direction::is_rtl() {
+        // The fork's `Grid` is not ready for right-to-left layouts (its available width goes
+        // NaN), so the rows are drawn by hand in reading order.
         let mut preset = f.get("__preset").and_then(Value::as_str).unwrap_or("custom").to_string();
-        if widgets::dropdown(
-            ui,
-            "guide-preset",
-            tl!("Preset:"),
-            &mut preset,
-            &[("custom".into(), "Custom"), ("five".into(), "5 Columns, 3 Rows"), ("eight".into(), "8 Columns"), ("twelve".into(), "12 Columns")],
-            222.0,
-        ) {
-            f.insert("__preset".into(), json!(preset));
-            match preset.as_str() {
-                "five" | "eight" | "twelve" => {
-                    let (cols, rows, gap) = match preset.as_str() {
-                        "five" => (5, 3, 0),
-                        "eight" => (8, 0, 20),
-                        _ => (12, 0, 24),
-                    };
-                    for (k, v) in [
-                        ("columns", json!(cols)),
-                        ("rows", json!(rows)),
-                        ("gutter", json!(gap)),
-                        ("rowGutter", json!(0)),
-                        ("width", Value::Null),
-                        ("height", Value::Null),
-                        ("margin", json!([0, 0, 0, 0])),
-                        ("__columnsEnabled", json!(true)),
-                        ("__rowsEnabled", json!(rows > 0)),
-                        ("__marginEnabled", json!(true)),
-                        ("centerColumns", json!(false)),
-                    ] {
-                        f.insert(k.into(), v);
-                    }
-                }
-                _ => {}
-            }
-        }
-        ui.end_row();
-        ui.label(tl!("Target:"));
         let mut target = f.get("target").and_then(Value::as_str).unwrap_or("document").to_string();
         let mut options = vec![("document".to_string(), "Document")];
         if !photocraft_engine::guide_layout::selected_artboards(&app.session).is_empty() {
             options.push(("selectedArtboards".into(), "Selected Artboards"));
         }
-        if widgets::dropdown(ui, "guide-target", tl!("Target"), &mut target, &options, 222.0) {
-            f.insert("target".into(), json!(target));
-        }
-        ui.end_row();
-    });
+        let label_w = label_width(ui, &[tl!("Preset:"), tl!("Target:")]);
+        settings_line(ui, label_w, tl!("Preset:"), |ui, _| {
+            if widgets::dropdown(ui, "guide-preset", tl!("Preset:"), &mut preset, &presets(), 222.0) {
+                f.insert("__preset".into(), json!(preset));
+                apply_preset(f, &preset);
+            }
+        });
+        settings_line(ui, label_w, tl!("Target:"), |ui, _| {
+            if widgets::dropdown(ui, "guide-target", tl!("Target"), &mut target, &options, 222.0) {
+                f.insert("target".into(), json!(target));
+            }
+        });
+    } else {
+        egui::Grid::new("guide-header").spacing([8.0, 6.0]).show(ui, |ui| {
+            ui.label(tl!("Preset:"));
+            let mut preset = f.get("__preset").and_then(Value::as_str).unwrap_or("custom").to_string();
+            if widgets::dropdown(ui, "guide-preset", tl!("Preset:"), &mut preset, &presets(), 222.0) {
+                f.insert("__preset".into(), json!(preset));
+                apply_preset(f, &preset);
+            }
+            ui.end_row();
+            ui.label(tl!("Target:"));
+            let mut target = f.get("target").and_then(Value::as_str).unwrap_or("document").to_string();
+            let mut options = vec![("document".to_string(), "Document")];
+            if !photocraft_engine::guide_layout::selected_artboards(&app.session).is_empty() {
+                options.push(("selectedArtboards".into(), "Selected Artboards"));
+            }
+            if widgets::dropdown(ui, "guide-target", tl!("Target"), &mut target, &options, 222.0) {
+                f.insert("target".into(), json!(target));
+            }
+            ui.end_row();
+        });
+    }
     ui.add_space(10.0);
     group(ui, |ui| {
         ui.label(tl!("Color"));
@@ -369,22 +425,28 @@ fn main_fields(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value
 pub fn body(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>, interactive: bool) -> Option<bool> {
     let before = (params(f), on(f, "__preview", true), f.get("color").cloned());
     let mut outcome = None;
-    ui.horizontal_top(|ui| {
-        ui.vertical(|ui| {
-            main_fields(app, ui, f);
-        });
-        ui.add_space(12.0);
-        ui.vertical(|ui| {
-            let valid = validate(app, f).is_ok();
-            if ui.add_enabled_ui(valid, |ui| widgets::primary_button(ui, tl!("OK"), 96.0)).inner.clicked() {
-                outcome = Some(true);
-            }
-            ui.add_space(4.0);
-            if widgets::secondary_button(ui, tl!("Cancel"), 96.0).clicked() {
-                outcome = Some(false);
-            }
-            ui.add_space(6.0);
-            check(ui, f, "__preview", tl!("Preview"), true);
+    // The host keeps its `top_down(Align::Min)` layout, so the body mirrors itself: in a
+    // right-to-left UI its blocks sit at the reading start and its rows read right to left.
+    ui.with_layout(crate::direction::body_layout(), |ui| {
+        ui.horizontal_top(|ui| {
+            // A vertical scope, not `ui.vertical`: the latter pins `Align::Min`, which keeps the
+            // rows inside it left-to-right even in a right-to-left UI.
+            column(ui, |ui| {
+                main_fields(app, ui, f);
+            });
+            ui.add_space(12.0);
+            column(ui, |ui| {
+                let valid = validate(app, f).is_ok();
+                if ui.add_enabled_ui(valid, |ui| widgets::primary_button(ui, tl!("OK"), 96.0)).inner.clicked() {
+                    outcome = Some(true);
+                }
+                ui.add_space(4.0);
+                if widgets::secondary_button(ui, tl!("Cancel"), 96.0).clicked() {
+                    outcome = Some(false);
+                }
+                ui.add_space(6.0);
+                check(ui, f, "__preview", tl!("Preview"), true);
+            });
         });
     });
     match calculate(app, f) {

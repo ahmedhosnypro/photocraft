@@ -324,3 +324,32 @@ fn preview_cache_tracks_document_revision() {
     app.run(COMMAND, json!({"margin":23})).unwrap();
     assert!(preview(&app, &app.session.active().unwrap().doc).unwrap().0.vertical.contains(&23.0));
 }
+
+/// The Columns and Rows group boxes and the OK button, in one run of the dialog in `dir`.
+fn mirrored_rows(dir: crate::text::direction::Dir) -> (egui::Rect, egui::Rect, egui::Rect) {
+    use egui_kittest::kittest::Queryable;
+    let _dir = crate::text::direction::direction_scope(dir);
+    let mut app = app();
+    let _id = open(&mut app);
+    let mut h = harness(app);
+    h.run_steps(3);
+    (h.get_by_label("Columns").rect(), h.get_by_label("Rows").rect(), h.get_by_label("OK").rect())
+}
+
+/// In a right-to-left UI the body reads from the right — the Columns group leads, the Rows group
+/// follows toward the reading end and the action rail moves to the left — while only the
+/// direction is forced: the labels and data stay the ones the left-to-right run pins.
+#[test]
+fn the_body_rows_mirror_in_a_right_to_left_ui() {
+    const WINDOW: f32 = 1400.0;
+    let (l_columns, l_rows, l_ok) = mirrored_rows(crate::text::direction::Dir::Ltr);
+    assert!(l_columns.right() < l_rows.left(), "LTR: the Columns group leads: {l_columns:?} / {l_rows:?}");
+    assert!(l_ok.left() > l_rows.right(), "LTR: the rail follows the fields: {l_ok:?} / {l_rows:?}");
+
+    let (r_columns, r_rows, r_ok) = mirrored_rows(crate::text::direction::Dir::Rtl);
+    assert!(r_columns.left() > r_rows.right(), "RTL: the Columns group still leads, from the right: {r_columns:?} / {r_rows:?}");
+    assert!(r_ok.right() < r_rows.left(), "RTL: the rail leads at the reading end: {r_ok:?} / {r_rows:?}");
+    for (name, ltr, rtl) in [("Columns", l_columns, r_columns), ("Rows", l_rows, r_rows), ("OK", l_ok, r_ok)] {
+        assert!((ltr.center().x + rtl.center().x - WINDOW).abs() < 2.0, "{name} mirrors about the centre: {ltr:?} / {rtl:?}");
+    }
+}
