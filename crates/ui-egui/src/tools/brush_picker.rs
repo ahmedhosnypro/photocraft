@@ -43,10 +43,10 @@ const SLIDER_H: f32 = 18.0;
 const FOOTER_GAP: f32 = 6.0;
 /// The room the footer takes from the picker's bottom.
 const FOOTER_H: f32 = SLIDER_H + FOOTER_GAP;
-/// Room the footer leaves on its right for the resize grip ([`resize_grip`] is 16 wide): the
-/// scale slider runs up to the grip's left edge, the two corner controls side by side.
+/// Room the footer leaves on the grip's side for the resize grip ([`resize_grip`] is 16 wide):
+/// the scale slider runs up to the grip's edge, the two corner controls side by side.
 const GRIP_ROOM: f32 = 20.0;
-/// The block the Size and Hardness controls share, flush with the picker's left edge and at most
+/// The block the Size and Hardness controls share, flush with the reading-start edge and at most
 /// this wide: a picker dragged wider keeps the controls their size, the space past them empty.
 pub(crate) const HEAD_MAX_W: f32 = 350.0;
 /// The footer scale slider's range: what the cards' size scale runs between, and what a
@@ -204,7 +204,9 @@ pub(crate) fn named(resp: egui::Response, label: &str) -> egui::Response {
 /// The picker's contents: Size, Hardness (round tips only: a sampled tip has none), a search
 /// field with the Brush Settings, New Preset and gear buttons, the preset list, and the footer
 /// slider that scales the cards ([`scale_slider`]). Size and Hardness sit in a block flush with
-/// the left edge, at most [`HEAD_MAX_W`] wide, so a picker dragged wider doesn't stretch them.
+/// the reading-start edge, at most [`HEAD_MAX_W`] wide, so a picker dragged wider doesn't stretch
+/// them. In a right-to-left UI the body mirrors ([`direction::window_body`]): the block hugs the
+/// right, the search row reads from the right and the resize grip sits in the bottom-left corner.
 /// `current` is the selected preset's name (by identity, so edits don't deselect). `size` is the
 /// content size the user dragged the picker to ([`DEFAULT_SIZE`] before that): the list fills
 /// it, so closing every group doesn't shrink the picker and reopening one has the room to show
@@ -218,71 +220,78 @@ pub fn body(
     size: egui::Vec2,
 ) -> Vec<Pick> {
     let t = Tokens::get(ui.ctx());
-    let mut picks = Vec::new();
     // The picker is its dragged (or remembered) size: at least that tall even when every group
     // is closed, so reopening one has the room to show it.
     ui.set_width(size.x);
     ui.set_min_height(size.y);
-    let top = ui.cursor().min.y;
-    // The Size and Hardness controls live in one block flush with the left edge, at most
-    // [`HEAD_MAX_W`] wide: a picker dragged wider leaves the space past the block empty instead of
-    // stretching the rows across it.
-    ui.scope(|ui| {
-        ui.set_max_width(ui.available_width().min(HEAD_MAX_W));
-        // Size: value field plus a logarithmic slider (small sizes get most of the travel).
+    // In a right-to-left UI the body's blocks sit at the reading start and its rows read from
+    // the right; a left-to-right body draws unchanged.
+    crate::direction::window_body(ui, |ui| {
+        let mut picks = Vec::new();
+        let top = ui.cursor().min.y;
+        // The Size and Hardness controls live in one block flush with the reading-start edge, at
+        // most [`HEAD_MAX_W`] wide: a picker dragged wider leaves the space past the block empty
+        // instead of stretching the rows across it. The block is allocated rather than scoped, so
+        // it hugs the reading start in a right-to-left UI too.
+        let head_w = ui.available_width().min(HEAD_MAX_W);
+        ui.allocate_ui_with_layout(vec2(head_w, ui.available_height()), crate::direction::body_layout(), |ui| {
+            // Size: value field plus a logarithmic slider (small sizes get most of the travel).
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(tl!("Size")).color(t.text_dim));
+                ui.with_layout(crate::direction::trailing(), |ui| {
+                    let mut size = b.size;
+                    if widgets::value_field(ui, &mut size, 1.0..=MAX_BRUSH_SIZE, "px", 72.0).accessible_name(tl!("Size")).changed() {
+                        b.size = size.round().clamp(1.0, MAX_BRUSH_SIZE);
+                    }
+                });
+            });
+            let mut lv = b.size.max(1.0).ln();
+            let size_slider = widgets::slider(ui, &mut lv, 0.0..=MAX_BRUSH_SIZE.ln(), None);
+            if size_slider.changed() {
+                b.size = lv.exp().round().clamp(1.0, MAX_BRUSH_SIZE);
+            }
+            dismiss_popup(&size_slider);
+            if b.tip == TipShape::Round {
+                let mut hard = b.hardness * 100.0;
+                let hardness = widgets::slider_row(ui, "Hardness", &mut hard, 0.0..=100.0, "%", None);
+                if hardness.changed() {
+                    b.hardness = (hard / 100.0).clamp(0.0, 1.0);
+                }
+                dismiss_popup(&hardness);
+            }
+        });
+        ui.add_space(6.0);
+        widgets::hairline(ui);
+        ui.add_space(6.0);
         ui.horizontal(|ui| {
-            ui.label(RichText::new(tl!("Size")).color(t.text_dim));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let mut size = b.size;
-                if widgets::value_field(ui, &mut size, 1.0..=MAX_BRUSH_SIZE, "px", 72.0).accessible_name(tl!("Size")).changed() {
-                    b.size = size.round().clamp(1.0, MAX_BRUSH_SIZE);
+            icons::paint(ui, egui::Rect::from_min_size(ui.cursor().min + vec2(0.0, 3.0), vec2(16.0, 16.0)), "search", 14.0, t.text_faint);
+            ui.add_space(20.0);
+            widgets::text_field(ui, ui.scope_id().with("brush-picker-search"), &mut st.filter, tl!("Search Brushes"), (size.x - 118.0).max(60.0), false);
+            // The gear, new-preset and settings buttons sit at the reading end of the row.
+            ui.with_layout(crate::direction::trailing(), |ui| {
+                gear_menu(ui, current, presets, st, &mut picks);
+                let new_tip = "Create new brush preset from the current settings";
+                let settings_tip = "Brush Settings…  (F5): every option of this brush";
+                if named(icons::button(ui, "square-plus", 24.0, false, tl!(new_tip)), "New Brush Preset").clicked() {
+                    picks.push(Pick::NewPreset);
+                }
+                if named(icons::button(ui, "sliders-horizontal", 24.0, false, tl!(settings_tip)), "Brush Settings…").clicked() {
+                    picks.push(Pick::OpenSettings);
                 }
             });
         });
-        let mut lv = b.size.max(1.0).ln();
-        let size_slider = widgets::slider(ui, &mut lv, 0.0..=MAX_BRUSH_SIZE.ln(), None);
-        if size_slider.changed() {
-            b.size = lv.exp().round().clamp(1.0, MAX_BRUSH_SIZE);
-        }
-        dismiss_popup(&size_slider);
-        if b.tip == TipShape::Round {
-            let mut hard = b.hardness * 100.0;
-            let hardness = widgets::slider_row(ui, "Hardness", &mut hard, 0.0..=100.0, "%", None);
-            if hardness.changed() {
-                b.hardness = (hard / 100.0).clamp(0.0, 1.0);
-            }
-            dismiss_popup(&hardness);
-        }
-    });
-    ui.add_space(6.0);
-    widgets::hairline(ui);
-    ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        icons::paint(ui, egui::Rect::from_min_size(ui.cursor().min + vec2(0.0, 3.0), vec2(16.0, 16.0)), "search", 14.0, t.text_faint);
-        ui.add_space(20.0);
-        widgets::text_field(ui, ui.scope_id().with("brush-picker-search"), &mut st.filter, tl!("Search Brushes"), (size.x - 118.0).max(60.0), false);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            gear_menu(ui, current, presets, st, &mut picks);
-            let new_tip = "Create new brush preset from the current settings";
-            let settings_tip = "Brush Settings…  (F5): every option of this brush";
-            if named(icons::button(ui, "square-plus", 24.0, false, tl!(new_tip)), "New Brush Preset").clicked() {
-                picks.push(Pick::NewPreset);
-            }
-            if named(icons::button(ui, "sliders-horizontal", 24.0, false, tl!(settings_tip)), "Brush Settings…").clicked() {
-                picks.push(Pick::OpenSettings);
-            }
-        });
-    });
-    ui.add_space(4.0);
-    // The list takes the picker's height past the controls above it and the footer below.
-    let mut layout = LIST;
-    layout.max_height = (size.y - (ui.cursor().min.y - top) - FOOTER_H).max(80.0);
-    picks.extend(brushes_tab::preset_list(ui, presets, current, st, layout).into_iter().map(Pick::List));
-    // The footer lives in the picker's bottom band whatever the list left over, flush with the
-    // bottom and the slider clear of the resize grip's corner.
-    ui.add_space((size.y - (ui.cursor().min.y - top) - SLIDER_H).max(FOOTER_GAP));
-    scale_slider(ui, st);
-    picks
+        ui.add_space(4.0);
+        // The list takes the picker's height past the controls above it and the footer below.
+        let mut layout = LIST;
+        layout.max_height = (size.y - (ui.cursor().min.y - top) - FOOTER_H).max(80.0);
+        picks.extend(brushes_tab::preset_list(ui, presets, current, st, layout).into_iter().map(Pick::List));
+        // The footer lives in the picker's bottom band whatever the list left over, flush with the
+        // bottom and the slider clear of the resize grip's corner.
+        ui.add_space((size.y - (ui.cursor().min.y - top) - SLIDER_H).max(FOOTER_GAP));
+        scale_slider(ui, st);
+        picks
+    })
+    .inner
 }
 
 /// The footer's card-scale slider: how big the preset cards are drawn (1 the standard, 2 the
@@ -293,7 +302,8 @@ pub fn body(
 /// holds its size at every scale).
 fn scale_slider(ui: &mut egui::Ui, st: &mut BrushesPanelState) {
     let w = (ui.available_width() - GRIP_ROOM).max(60.0);
-    ui.allocate_ui_with_layout(vec2(w, SLIDER_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+    // The slider hugs the reading start, clear of the mirrored resize grip.
+    ui.allocate_ui_with_layout(vec2(w, SLIDER_H), crate::direction::row(), |ui| {
         let resp = widgets::slider(ui, &mut st.scale, SCALE_RANGE, None);
         if resp.changed() {
             st.scale = (st.scale * 100.0).round() / 100.0;
@@ -322,23 +332,36 @@ pub fn clamp_size(size: [f32; 2], screen: egui::Vec2) -> egui::Vec2 {
     egui::vec2(size[0], size[1]).clamp(min, max)
 }
 
-/// The picker's resize grip, in its frame's bottom-right corner: three ticks, dragging gives the
-/// new content size (clamped to [`MIN_SIZE`] and the screen). Returns the size while dragged. The
-/// corner tracks the pointer's travel since the drag began, not each frame's movement: held past
-/// a limit (the minimum, the screen), the overshoot isn't banked, so coming back the picker grows
-/// only once the pointer reaches the corner again — it waits for the pointer.
+/// The picker's resize grip, in its frame's bottom corner at the reading end: three ticks,
+/// dragging gives the new content size (clamped to [`MIN_SIZE`] and the screen). Returns the
+/// size while dragged. The corner tracks the pointer's travel since the drag began, not each
+/// frame's movement: held past a limit (the minimum, the screen), the overshoot isn't banked,
+/// so coming back the picker grows only once the pointer reaches the corner again — it waits
+/// for the pointer.
 pub fn resize_grip(ui: &mut egui::Ui, frame: egui::Rect, content: egui::Vec2) -> Option<egui::Vec2> {
     let t = Tokens::get(ui.ctx());
-    let grip = egui::Rect::from_min_size(frame.right_bottom() - vec2(16.0, 16.0), vec2(16.0, 16.0));
+    // The grip is chrome, not canvas: in a right-to-left UI it sits in the bottom-left corner
+    // and the drag grows the picker towards the left.
+    let rtl = crate::direction::is_rtl();
+    let grip = if rtl {
+        egui::Rect::from_min_size(frame.left_bottom() - vec2(0.0, 16.0), vec2(16.0, 16.0))
+    } else {
+        egui::Rect::from_min_size(frame.right_bottom() - vec2(16.0, 16.0), vec2(16.0, 16.0))
+    };
     let resp = ui.interact(grip, ui.scope_id().with("brush-picker-resize"), egui::Sense::drag());
     dismiss_popup(&resp);
-    let corner = grip.right_bottom() - vec2(3.0, 3.0);
+    let corner = if rtl { grip.left_bottom() + vec2(3.0, -3.0) } else { grip.right_bottom() - vec2(3.0, 3.0) };
     for i in 0..3 {
         let o = i as f32 * 4.0;
-        ui.painter().line_segment([corner - vec2(o, 0.0), corner - vec2(0.0, o)], Stroke::new(1.0, t.text_faint));
+        let (from, to) = if rtl {
+            (corner + vec2(o, 0.0), corner - vec2(0.0, o))
+        } else {
+            (corner - vec2(o, 0.0), corner - vec2(0.0, o))
+        };
+        ui.painter().line_segment([from, to], Stroke::new(1.0, t.text_faint));
     }
     if resp.hovered() || resp.dragged() {
-        ui.ctx().set_cursor_icon(CursorIcon::ResizeNwSe);
+        ui.ctx().set_cursor_icon(if rtl { CursorIcon::ResizeNeSw } else { CursorIcon::ResizeNwSe });
     }
     // The size this drag started from, kept while the button is held.
     let start_id = resp.id.with("start");
@@ -349,7 +372,10 @@ pub fn resize_grip(ui: &mut egui::Ui, frame: egui::Rect, content: egui::Vec2) ->
         let min = egui::vec2(MIN_SIZE[0], MIN_SIZE[1]);
         let max = (ui.ctx().content_rect().size() - vec2(40.0, 40.0)).max(min);
         let start: egui::Vec2 = ui.ctx().data_mut(|d| d.get_temp(start_id)).unwrap_or(content);
-        (start + resp.total_drag_delta().unwrap_or_default()).clamp(min, max)
+        let delta = resp.total_drag_delta().unwrap_or_default();
+        // The grip's corner flips with the direction, so the drag's x sign flips with it.
+        let delta = if rtl { vec2(-delta.x, delta.y) } else { delta };
+        (start + delta).clamp(min, max)
     })
 }
 
@@ -357,10 +383,11 @@ pub fn resize_grip(ui: &mut egui::Ui, frame: egui::Rect, content: egui::Vec2) ->
 /// view, and Import Brushes.
 fn gear_menu(ui: &mut egui::Ui, current: Option<&str>, presets: &[BrushPreset], st: &mut BrushesPanelState, picks: &mut Vec<Pick>) {
     let gear = named(icons::button(ui, "settings", 24.0, false, tl!("Brush Preset Options")), "Brush Preset Options");
-    // The menu hangs 30 pt right of the gear, off the button's own edge; the align fallbacks still
+    // The menu hangs 30 pt off the gear's own edge, on the reading end; the align fallbacks still
     // keep it on screen near the window's edge.
+    let offset = if crate::direction::is_rtl() { -30.0 } else { 30.0 };
     let anchor = match egui::PopupAnchor::from(&gear) {
-        egui::PopupAnchor::ParentRect(rect) => egui::PopupAnchor::ParentRect(rect.translate(vec2(30.0, 0.0))),
+        egui::PopupAnchor::ParentRect(rect) => egui::PopupAnchor::ParentRect(rect.translate(vec2(offset, 0.0))),
         other => other,
     };
     egui::Popup::menu(&gear).anchor(anchor).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
