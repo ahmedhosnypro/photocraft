@@ -173,19 +173,21 @@ pub fn status_bar_pro(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         ui.painter().rect_filled(r, t.radius_sm, t.hover);
     }
     // Points along the bar, away from the zoom field.
-    icons::paint(ui, r, if crate::direction::is_rtl() { "chevron-left" } else { "chevron-right" }, 11.0, t.text_dim);
+    icons::paint(ui, r, "chevron-right", 11.0, t.text_dim);
     let resp = resp.on_hover_text(tl!("Show"));
-    egui::Popup::menu(&resp).show(|ui| {
-        crate::widgets::style_spectrum_popup_menu(ui);
-        ui.set_min_width(200.0);
-        for (key, label) in STATUS_INFO {
-            let on = app.ui.chrome.status_info == *key;
-            if ui.add(egui::Button::selectable(on, *label)).clicked() {
-                app.ui.chrome.status_info = (*key).to_string();
-                ui.close();
+    egui::Popup::menu(&resp)
+        .align(crate::direction::below())
+        .show(|ui| {
+            crate::widgets::style_spectrum_popup_menu(ui);
+            ui.set_min_width(200.0);
+            for (key, label) in STATUS_INFO {
+                let on = app.ui.chrome.status_info == *key;
+                if ui.add(egui::Button::selectable(on, *label)).clicked() {
+                    app.ui.chrome.status_info = (*key).to_string();
+                    ui.close();
+                }
             }
-        }
-    });
+        });
     status_message(app, ui, &t);
 }
 

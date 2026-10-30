@@ -95,7 +95,7 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             // Toolbar width is a user preference, not a Pro-only feature.
             // Keep the same hit target in every theme (including RTL layouts).
             let (cr, resp) = ui.allocate_exact_size(vec2(bx, 14.0), Sense::click());
-            let (shrink, grow) = if crate::direction::is_rtl() { ("chevrons-right", "chevrons-left") } else { ("chevrons-left", "chevrons-right") };
+            let (shrink, grow) = ("chevrons-left", "chevrons-right");
             icons::paint(ui, cr, if double { shrink } else { grow }, 11.0, if resp.hovered() { t.text } else { t.text_faint });
             resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tl!("Toolbar")));
             if resp.clicked() {
