@@ -348,4 +348,21 @@ mod rtl_tests {
         assert!(ltr_radii[2].left() < ltr_radii[3].left(), "LTR: bottom-left is left of bottom-right: {ltr_radii:?}");
         assert!(rtl_radii[2].left() > rtl_radii[3].left(), "RTL: bottom-left is right of bottom-right: {rtl_radii:?}");
     }
+
+    /// The polygon variant's own rows mirror too.
+    #[test]
+    fn the_polygon_body_reads_from_the_right_under_rtl() {
+        let app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        let mut fields = Map::new();
+        fields.insert(MARK.into(), json!("polygon"));
+        fields.insert("sides".into(), json!(5.0));
+        fields.insert("starRatio".into(), json!(100.0));
+
+        let rtl = {
+            let _rtl = crate::text::direction::direction_scope(crate::text::direction::Dir::Rtl);
+            texts(&app, &mut fields)
+        };
+        let (caption, value) = pair(&rtl, "Sides:");
+        assert!(caption.left() > value.right(), "RTL: the caption is right of its field: {caption:?} {value:?}");
+    }
 }
