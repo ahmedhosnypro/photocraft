@@ -22,6 +22,14 @@ pub(crate) fn row_value(x: f32, min: f32, max: f32, decimals: Option<u32>) -> f3
 }
 
 pub(super) fn sliders(ui: &mut egui::Ui, v: &mut Value, rows: &[SliderRow]) -> Edit {
+    // The body scope mirrors the rows in a right-to-left UI (the caption at the reading start,
+    // the number at the reading end). The plain adjustment kinds call this directly, so the
+    // scope lives here and not only in the editors.
+    ui.with_layout(crate::direction::body_layout(), |ui| slider_rows(ui, v, rows)).inner
+}
+
+/// The rows themselves, drawn inside the mirrored body scope.
+fn slider_rows(ui: &mut egui::Ui, v: &mut Value, rows: &[SliderRow]) -> Edit {
     let mut e = Edit::default();
     for &(key, text, min, max, default, unit, decimals) in rows {
         let mut x = num(v, key, default).clamp(min, max);
@@ -51,6 +59,10 @@ pub(super) fn track_stops<'a>(cx: &EditorCx, stops: &'a [Color32]) -> Option<&'a
 // Brightness/Contrast
 
 pub(super) fn brightness_contrast(ui: &mut egui::Ui, v: &mut Value) -> Edit {
+    ui.with_layout(crate::direction::body_layout(), |ui| brightness_contrast_body(ui, v)).inner
+}
+
+fn brightness_contrast_body(ui: &mut egui::Ui, v: &mut Value) -> Edit {
     let legacy = flag(v, "legacy", false);
     let lo = if legacy { -100.0 } else { -50.0 };
     let mut e = sliders(ui, v, &[("brightness", tl!("Brightness"), -150.0, 150.0, 0.0, "", None), ("contrast", tl!("Contrast"), lo, 100.0, 0.0, "", None)]);
@@ -69,11 +81,17 @@ pub(super) fn brightness_contrast(ui: &mut egui::Ui, v: &mut Value) -> Edit {
 // Threshold
 
 pub(super) fn threshold(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
+    ui.with_layout(crate::direction::body_layout(), |ui| threshold_body(ui, v, cx)).inner
+}
+
+fn threshold_body(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     let t = Tokens::get(ui.ctx());
     let w = ui.available_width().min(300.0);
     let (hr, _) = ui.allocate_exact_size(vec2(w, 90.0), Sense::hover());
     let hr = hr.shrink2(vec2(6.0, 0.0));
     let p = ui.painter_at(hr.expand(1.0));
+    // The histogram is a tonal graph: it and the level marker on it keep their physical
+    // dark-to-light order whatever the UI direction.
     p.rect_filled(hr, 0.0, t.field);
     if let Some(h) = &cx.hist {
         tone::draw_histogram(&p, hr, &h[0], Color32::from_gray(if t.pro { 150 } else { 110 }));
@@ -113,6 +131,10 @@ pub fn reset_adjustment_editor(ctx: &egui::Context, kind: &str, mem: egui::Id, v
 }
 
 pub(super) fn color_balance(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
+    ui.with_layout(crate::direction::body_layout(), |ui| color_balance_body(ui, v, cx)).inner
+}
+
+fn color_balance_body(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     let tone_id = color_balance_tone_id(cx.mem);
     let mut tone_ix: usize = ui.data(|d| d.get_temp(tone_id)).unwrap_or(1);
     ui.horizontal(|ui| {
@@ -156,6 +178,10 @@ pub(super) fn color_balance(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> 
 // Black & White
 
 pub(super) fn black_white(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
+    ui.with_layout(crate::direction::body_layout(), |ui| black_white_body(ui, v, cx)).inner
+}
+
+fn black_white_body(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     let mut e = Edit::default();
     let colors = [[230, 50, 50], [235, 215, 40], [50, 200, 70], [40, 200, 220], [50, 90, 235], [220, 50, 210]];
     for (i, key) in HUE_RANGES.iter().enumerate() {
@@ -195,6 +221,10 @@ pub(super) fn black_white(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Ed
 // Photo Filter
 
 pub(super) fn photo_filter(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
+    ui.with_layout(crate::direction::body_layout(), |ui| photo_filter_body(ui, v, cx)).inner
+}
+
+fn photo_filter_body(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     let mut e = Edit::default();
     let mut c = rgb_of(v, "color", [236.0 / 255.0, 138.0 / 255.0, 0.0]);
     let hex = adjust_params::hex(c);
@@ -241,6 +271,10 @@ pub(super) fn photo_filter(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> E
 // Channel Mixer
 
 pub(super) fn channel_mixer(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
+    ui.with_layout(crate::direction::body_layout(), |ui| channel_mixer_body(ui, v, cx)).inner
+}
+
+fn channel_mixer_body(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     let t = Tokens::get(ui.ctx());
     let mono = flag(v, "monochrome", false);
     let out_id = cx.mem.with("cm-out");
@@ -287,4 +321,86 @@ pub(super) fn channel_mixer(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> 
         e.add(Edit::discrete(true));
     }
     e
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::direction::{Dir, direction_scope};
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::{Queryable, by};
+
+    /// The Brightness/Contrast editor drawn in `dir`.
+    fn harness(dir: Dir) -> Harness<'static, Value> {
+        let _dir = direction_scope(dir);
+        let mut h = Harness::builder().with_size(egui::vec2(380.0, 220.0)).build_ui_state(
+            |ui, v: &mut Value| {
+                brightness_contrast(ui, v);
+            },
+            json!({}),
+        );
+        crate::PhotocraftApp::setup_context(&h.ctx, Default::default());
+        h.run_steps(4);
+        h
+    }
+
+    /// The Brightness row's caption and its number field.
+    fn brightness_row(h: &Harness<'_, Value>) -> (egui::Rect, egui::Rect) {
+        let caption = h.query_all(by().role(egui::accesskit::Role::Label).label("Brightness").include_labels()).next().expect("the Brightness caption").rect();
+        let field = h.get_by_role_and_label(egui::accesskit::Role::SpinButton, "Brightness").rect();
+        (caption, field)
+    }
+
+    /// The row mirrors in a right-to-left UI: the caption moves to the reading start and the
+    /// number to the reading end.
+    #[test]
+    fn brightness_contrast_row_mirrors_under_rtl() {
+        let (ltr_caption, ltr_field) = brightness_row(&harness(Dir::Ltr));
+        let (rtl_caption, rtl_field) = brightness_row(&harness(Dir::Rtl));
+        assert!(ltr_caption.left() < ltr_field.left(), "LTR reads left to right: {ltr_caption:?} {ltr_field:?}");
+        assert!(rtl_caption.left() > rtl_field.left(), "RTL reads right to left: {rtl_caption:?} {rtl_field:?}");
+    }
+
+    /// The threshold histogram and the level marker on it, painted in `dir`.
+    fn painted_threshold(dir: Dir) -> (egui::Rect, f32) {
+        let _dir = direction_scope(dir);
+        let ctx = egui::Context::default();
+        crate::PhotocraftApp::setup_context(&ctx, Default::default());
+        let t = Tokens::get(&ctx);
+        let mut v = json!({ "level": 64.0 });
+        let cx = EditorCx {
+            mem: egui::Id::unique("threshold"),
+            hist: None,
+            gray: false,
+            swatches: [[0.0; 3]; 2],
+            gradients: Vec::new(),
+            dialog: true,
+            dynamic_color_sliders: true,
+            isolated_curve: None,
+        };
+        let out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            threshold(ui, &mut v, &cx);
+        });
+        let mut hist = None;
+        let mut marker = None;
+        for clipped in &out.shapes {
+            match &clipped.shape {
+                egui::Shape::Rect(r) if (r.rect.height() - 90.0).abs() < 0.5 => hist = Some(r.rect),
+                egui::Shape::LineSegment { points, stroke } if stroke.color == t.accent => marker = Some(points[0].x),
+                _ => {}
+            }
+        }
+        (hist.expect("the histogram"), marker.expect("the level marker"))
+    }
+
+    /// The histogram is a tonal graph, so it and the level marker on it keep their physical
+    /// dark-to-light order in a right-to-left UI.
+    #[test]
+    fn threshold_graph_stays_physical_under_rtl() {
+        for dir in [Dir::Ltr, Dir::Rtl] {
+            let (hist, marker) = painted_threshold(dir);
+            let fraction = (marker - hist.left()) / hist.width();
+            assert!((fraction - 64.0 / 255.0).abs() < 0.01, "{dir:?}: the marker sits at the level: {hist:?} {marker}");
+        }
+    }
 }
