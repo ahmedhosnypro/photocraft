@@ -30,6 +30,7 @@ mod paint_bucket_all_layers;
 mod pattern_preview_canvas;
 mod radial_blur_center;
 mod remove_channel_target;
+mod rtl_brush_picker;
 mod rtl_dialogs;
 mod rtl_menu_rows;
 mod rtl_shell;
