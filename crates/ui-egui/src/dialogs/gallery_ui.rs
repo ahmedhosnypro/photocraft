@@ -632,6 +632,70 @@ fn update_thumbs(d: &mut GalleryDialog, ctx: &egui::Context, budget: usize) {
     }
 }
 
+/// The gallery's panes: the settings pane (OK/Cancel, the filter's settings, the effect
+/// stack), the category folders in the middle and the preview filling the rest, with the zoom
+/// bar under it.
+struct GalleryPanes {
+    settings: ERect,
+    folders: ERect,
+    preview: ERect,
+    zoom_bar: ERect,
+}
+
+/// The panes of the dialog body. A right-to-left UI mirrors them: the preview keeps the
+/// reading start.
+fn panes(body: ERect, rtl: bool) -> GalleryPanes {
+    if rtl {
+        let settings = ERect::from_min_size(pos2(body.left(), body.top()), vec2(RIGHT_W, body.height()));
+        let folders = ERect::from_min_size(pos2(settings.right(), body.top()), vec2(MID_W, body.height()));
+        let preview = ERect::from_min_max(pos2(folders.right(), body.top()), pos2(body.right(), body.bottom() - 30.0));
+        let zoom_bar = ERect::from_min_max(pos2(folders.right(), preview.bottom()), pos2(body.right(), body.bottom()));
+        GalleryPanes { settings, folders, preview, zoom_bar }
+    } else {
+        let settings = ERect::from_min_size(pos2(body.right() - RIGHT_W, body.top()), vec2(RIGHT_W, body.height()));
+        let folders = ERect::from_min_size(pos2(settings.left() - MID_W, body.top()), vec2(MID_W, body.height()));
+        let preview = ERect::from_min_max(body.min, pos2(folders.left(), body.bottom() - 30.0));
+        let zoom_bar = ERect::from_min_max(pos2(body.left(), preview.bottom()), pos2(folders.left(), body.bottom()));
+        GalleryPanes { settings, folders, preview, zoom_bar }
+    }
+}
+
+/// The eye toggle and the filter name of an effect-stack row: the eye keeps the reading start.
+fn stack_row_parts(row: ERect, rtl: bool) -> (ERect, egui::Pos2, Align2) {
+    if rtl {
+        let eye = ERect::from_min_size(pos2(row.right() - 20.0, row.top() + 4.0), vec2(16.0, 16.0));
+        (eye, row.right_center() - vec2(28.0, 0.0), Align2::RIGHT_CENTER)
+    } else {
+        let eye = ERect::from_min_size(row.min + vec2(4.0, 4.0), vec2(16.0, 16.0));
+        (eye, row.left_center() + vec2(28.0, 0.0), Align2::LEFT_CENTER)
+    }
+}
+
+/// One category thumbnail: the picture, its frame and the filter's name under it. Returns the
+/// click response.
+fn gallery_cell(ui: &mut egui::Ui, d: &GalleryDialog, i: usize, f: GalleryFilter, selected: bool, rtl: bool, t: &Tokens) -> egui::Response {
+    ui.vertical(|ui| {
+        let (r, resp) = ui.allocate_exact_size(vec2(THUMB[0] as f32, THUMB[1] as f32), Sense::click());
+        match &d.thumbs[i] {
+            Some(tex) => {
+                ui.painter().image(tex.id(), r, ERect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+            }
+            None => {
+                ui.painter().rect_filled(r, 2.0, t.field);
+            }
+        }
+        let stroke = if selected { Stroke::new(2.0, t.accent) } else { Stroke::new(1.0, t.separator) };
+        ui.painter().rect_stroke(r, 0.0, stroke, egui::StrokeKind::Outside);
+        let mut label = egui::Label::new(egui::RichText::new(tl!(f.name())).size(10.5).color(if selected { t.text } else { t.text_dim })).truncate();
+        if rtl {
+            label = label.halign(egui::Align::Max);
+        }
+        ui.add_sized([THUMB[0] as f32, 14.0], label);
+        resp
+    })
+    .inner
+}
+
 /// Draws the dialog (a full-window layer over the app).
 pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
     let t = Tokens::get(ctx);
@@ -651,10 +715,8 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
         let name = d.effects.get(d.selected).map_or("", |e| tl!(e.filter.name()));
         painter.text(title.center(), Align2::CENTER_CENTER, format!("{name} ({}, {pct})", d.layer_name), FontId::proportional(13.0), t.text);
         let body = ERect::from_min_max(pos2(full.left(), title.bottom()), full.max);
-        let right = ERect::from_min_size(pos2(body.right() - RIGHT_W, body.top()), vec2(RIGHT_W, body.height()));
-        let mid = ERect::from_min_size(pos2(right.left() - MID_W, body.top()), vec2(MID_W, body.height()));
-        let area = ERect::from_min_max(body.min, pos2(mid.left(), body.bottom() - 30.0));
-        let zoom_bar = ERect::from_min_max(pos2(body.left(), area.bottom()), pos2(mid.left(), body.bottom()));
+        let rtl = crate::text::direction::is_rtl();
+        let GalleryPanes { settings, folders: mid, preview: area, zoom_bar } = panes(body, rtl);
 
         // ---- Preview ----
         painter.rect_filled(area, 0.0, t.canvas);
@@ -672,7 +734,7 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
         }
         // ---- Zoom bar ----
         painter.rect_filled(zoom_bar, 0.0, t.dock);
-        let mut zb = ui.new_child(egui::UiBuilder::new().max_rect(zoom_bar.shrink2(vec2(10.0, 3.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        let mut zb = ui.new_child(egui::UiBuilder::new().max_rect(zoom_bar.shrink2(vec2(10.0, 3.0))).layout(crate::text::direction::row()));
         if crate::icons::button(&mut zb, "minus", 22.0, false, tl!("Zoom out")).clicked() {
             d.zoom = step_zoom(d, -1);
         }
@@ -703,7 +765,7 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
         painter.rect_filled(mid, 0.0, t.dock);
         painter.line_segment([mid.left_top(), mid.left_bottom()], Stroke::new(1.0, t.separator));
         update_thumbs(d, ctx, 6);
-        let mut mu = ui.new_child(egui::UiBuilder::new().max_rect(mid.shrink2(vec2(8.0, 8.0))));
+        let mut mu = ui.new_child(egui::UiBuilder::new().max_rect(mid.shrink2(vec2(8.0, 8.0))).layout(crate::text::direction::body_layout()));
         egui::ScrollArea::vertical().id_salt("gallery-tree").show(&mut mu, |ui| {
             for (ci, cat) in GALLERY_CATEGORIES.iter().enumerate() {
                 let icon = if d.open[ci] { "folder-open" } else { "folder" };
@@ -720,44 +782,47 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                     continue;
                 }
                 let members: Vec<(usize, GalleryFilter)> = GalleryFilter::ALL.iter().copied().enumerate().filter(|(_, f)| f.category() == *cat).collect();
-                egui::Grid::new(format!("gallery-cat-{ci}")).spacing([6.0, 6.0]).show(ui, |ui| {
-                    for (n, (i, f)) in members.iter().enumerate() {
-                        let selected = d.effects.get(d.selected).is_some_and(|e| e.filter == *f);
-                        let cell = ui.vertical(|ui| {
-                            let (r, resp) = ui.allocate_exact_size(vec2(THUMB[0] as f32, THUMB[1] as f32), Sense::click());
-                            match &d.thumbs[*i] {
-                                Some(tex) => {
-                                    ui.painter().image(tex.id(), r, ERect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
-                                }
-                                None => {
-                                    ui.painter().rect_filled(r, 2.0, t.field);
+                const COLS: usize = 3;
+                if rtl {
+                    // The fork's `egui::Grid` breaks under right-to-left layouts (its available
+                    // width goes NaN), so the rows are drawn by hand in reading order: the
+                    // right-to-left row puts the first-added cell at the right.
+                    for chunk in members.chunks(COLS) {
+                        ui.with_layout(crate::text::direction::row(), |ui| {
+                            for &(i, f) in chunk {
+                                let selected = d.effects.get(d.selected).is_some_and(|e| e.filter == f);
+                                if gallery_cell(ui, d, i, f, selected, rtl, &t).clicked() {
+                                    d.set_filter(f);
                                 }
                             }
-                            let stroke = if selected { Stroke::new(2.0, t.accent) } else { Stroke::new(1.0, t.separator) };
-                            ui.painter().rect_stroke(r, 0.0, stroke, egui::StrokeKind::Outside);
-                            ui.add_sized(
-                                [THUMB[0] as f32, 14.0],
-                                egui::Label::new(egui::RichText::new(tl!(f.name())).size(10.5).color(if selected { t.text } else { t.text_dim })).truncate(),
-                            );
-                            resp
                         });
-                        if cell.inner.clicked() {
-                            d.set_filter(*f);
-                        }
-                        if n % 3 == 2 {
-                            ui.end_row();
-                        }
+                        ui.add_space(6.0);
                     }
-                });
+                } else {
+                    egui::Grid::new(format!("gallery-cat-{ci}")).spacing([6.0, 6.0]).show(ui, |ui| {
+                        for (n, (i, f)) in members.iter().copied().enumerate() {
+                            let selected = d.effects.get(d.selected).is_some_and(|e| e.filter == *f);
+                            if gallery_cell(ui, d, i, f, selected, rtl, &t).clicked() {
+                                d.set_filter(f);
+                            }
+                            if n % COLS == COLS - 1 {
+                                ui.end_row();
+                            }
+                        }
+                    });
+                }
                 ui.add_space(4.0);
             }
         });
 
-        // ---- Right: buttons, filter settings, effect layers ----
-        painter.rect_filled(right, 0.0, t.dock);
-        painter.line_segment([right.left_top(), right.left_bottom()], Stroke::new(1.0, t.separator));
-        let inner = right.shrink2(vec2(12.0, 10.0));
-        let mut ru = ui.new_child(egui::UiBuilder::new().max_rect(inner));
+        // ---- Settings pane: buttons, filter settings, effect layers ----
+        painter.rect_filled(settings, 0.0, t.dock);
+        // The pane separator: the folders/settings edge in LTR, the folders/preview edge in RTL.
+        // The other separator is the folders pane's own left edge, drawn with the folders pane.
+        let divider = if rtl { mid.right() } else { settings.left() };
+        painter.line_segment([pos2(divider, settings.top()), pos2(divider, settings.bottom())], Stroke::new(1.0, t.separator));
+        let inner = settings.shrink2(vec2(12.0, 10.0));
+        let mut ru = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(crate::text::direction::body_layout()));
         ru.spacing_mut().item_spacing.y = 6.0;
         ru.horizontal(|ui| {
             if let Some(role) = widgets::dialog_buttons(
@@ -831,7 +896,7 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
         // Effect layers (top of the list = applied last).
         let list_top = inner.bottom() - list_h;
         let lr = ERect::from_min_max(pos2(inner.left(), list_top), inner.max);
-        let mut lu = ui.new_child(egui::UiBuilder::new().max_rect(lr));
+        let mut lu = ui.new_child(egui::UiBuilder::new().max_rect(lr).layout(crate::text::direction::body_layout()));
         widgets::hairline(&mut lu);
         egui::ScrollArea::vertical().id_salt("gallery-layers").max_height(list_h - 44.0).show(&mut lu, |ui| {
             let mut toggle = None;
@@ -841,17 +906,18 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 if sel {
                     ui.painter().rect_filled(row, 2.0, t.accent_soft);
                 }
-                let eye = ERect::from_min_size(row.min + vec2(4.0, 4.0), vec2(16.0, 16.0));
+                let (eye, name_at, name_align) = stack_row_parts(row, rtl);
                 crate::icons::paint(ui, eye, if d.effects[i].visible { "eye" } else { "eye-off" }, 14.0, t.icon);
                 ui.painter().text(
-                    row.left_center() + vec2(28.0, 0.0),
-                    Align2::LEFT_CENTER,
+                    name_at,
+                    name_align,
                     tl!(d.effects[i].filter.name()),
                     FontId::proportional(12.5),
                     if d.effects[i].visible { t.text } else { t.text_faint },
                 );
                 if resp.clicked() {
-                    if resp.interact_pointer_pos().is_some_and(|p| p.x < eye.right() + 4.0) {
+                    let on_eye = resp.interact_pointer_pos().is_some_and(|p| if rtl { p.x > eye.left() - 4.0 } else { p.x < eye.right() + 4.0 });
+                    if on_eye {
                         toggle = Some(i);
                     } else {
                         d.selected = i;
@@ -871,7 +937,7 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 let s = d.selected;
                 d.move_to(s, s.saturating_sub(1));
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(crate::text::direction::trailing(), |ui| {
                 if crate::icons::button(ui, "trash", 24.0, false, tl!("Delete effect layer")).clicked() {
                     d.delete();
                 }
@@ -892,3 +958,123 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
 
 #[cfg(test)]
 mod tests;
+
+/// The gallery mirrors its panes and its effect-stack rows in a right-to-left UI: the preview
+/// keeps the reading start and the eye toggle keeps it inside a stack row.
+#[cfg(test)]
+mod rtl_tests {
+    use super::*;
+    use egui::accesskit::Role;
+    use egui_kittest::kittest::{NodeT, Queryable};
+
+    /// The dialog over a small painted document, with only the dialog drawn (like the LTR
+    /// tests): the caller's `direction_scope` decides the direction.
+    fn gallery_harness(app: PhotocraftApp) -> egui_kittest::Harness<'static, PhotocraftApp> {
+        let h = egui_kittest::Harness::builder()
+            .with_size(vec2(1280.0, 800.0))
+            .with_max_steps(64)
+            .build_ui_state(|ui, app: &mut PhotocraftApp| show(app, ui.ctx()), app);
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+        h
+    }
+
+    /// The app of the LTR tests: one document, one painted layer, the gallery open on it.
+    fn gallery_app() -> PhotocraftApp {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        app.session.execute("file.new", json!({"width": 90, "height": 60, "depth": 16})).unwrap();
+        app.session.execute("layer.new.layer", json!({})).unwrap();
+        app.session
+            .edit("paint", |doc, active| {
+                let s = doc.layer_mut(active.unwrap()).unwrap().surface_mut().unwrap();
+                for y in 0..60 {
+                    for x in 0..90 {
+                        let v = ((x / 6 + y / 6) % 2) as f32;
+                        s.write_pixel(x, y, &[v, 0.4, 1.0 - v, 1.0]);
+                    }
+                }
+                Ok(())
+            })
+            .unwrap();
+        open(&mut app).unwrap();
+        app
+    }
+
+    /// A primary click at `p`: move, press, release, then settle.
+    fn click(h: &egui_kittest::Harness<'_, PhotocraftApp>, p: egui::Pos2) {
+        h.event(egui::Event::PointerMoved(p));
+        h.run_steps(1);
+        h.event(egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.run_steps(1);
+        h.event(egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+        h.run_steps(2);
+    }
+
+    /// The painted rect of the first text shape reading exactly `needle` inside `band`: the
+    /// dialog paints its own labels, so the frame's shapes are what a reader sees.
+    fn text_rect(h: &egui_kittest::Harness<'_, PhotocraftApp>, needle: &str, band: ERect) -> Option<ERect> {
+        h.output().shapes.iter().find_map(|s| match &s.shape {
+            egui::Shape::Text(t) if t.galley.text() == needle => {
+                let r = ERect::from_min_size(t.pos, t.galley.size());
+                band.contains_rect(r).then_some(r)
+            }
+            _ => None,
+        })
+    }
+
+    /// The painted rect of the stack row's eye icon: the only small image shape on the name's
+    /// row inside the effect-stack band (the pane's own icons sit outside it, the footer's in
+    /// another row).
+    fn eye_rect(h: &egui_kittest::Harness<'_, PhotocraftApp>, band: ERect, name: ERect) -> Option<ERect> {
+        h.output().shapes.iter().find_map(|s| match &s.shape {
+            egui::Shape::Mesh(m) => {
+                let mut v = m.vertices.iter().map(|v| v.pos);
+                let first = v.next()?;
+                let r = v.fold(ERect::from_min_max(first, first), |r, p| r.expand_to_include(p));
+                let on_row = (r.center().y - name.center().y).abs() < 8.0;
+                (band.intersects(r) && on_row && r.width() < 20.0 && r.height() < 20.0).then_some(r)
+            }
+            _ => None,
+        })
+    }
+
+    /// The dialog's pane rects for the harness's window (as `show` computes them).
+    fn harness_panes(rtl: bool) -> GalleryPanes {
+        panes(ERect::from_min_max(pos2(0.0, 30.0), pos2(1280.0, 800.0)), rtl)
+    }
+
+    /// The effect-stack band: the bottom of the settings pane, as `show` lays it out.
+    fn stack_band(rtl: bool) -> ERect {
+        let p = harness_panes(rtl);
+        let inner = p.settings.shrink2(vec2(12.0, 10.0));
+        ERect::from_min_max(pos2(inner.left(), inner.bottom() - 190.0), pos2(inner.right(), inner.bottom()))
+    }
+
+    #[test]
+    fn the_panes_mirror_in_a_right_to_left_ui() {
+        let body = ERect::from_min_size(pos2(0.0, 30.0), vec2(1000.0, 700.0));
+        let ltr = panes(body, false);
+        assert_eq!(ltr.settings.right(), body.right(), "the settings pane hugs the reading end");
+        assert_eq!(ltr.preview.left(), body.left(), "the preview keeps the reading start");
+        assert_eq!(ltr.zoom_bar.left(), body.left());
+        let rtl = panes(body, true);
+        assert_eq!(rtl.settings.left(), body.left(), "the settings pane moves to the reading end");
+        assert_eq!(rtl.preview.right(), body.right(), "the preview keeps the reading start");
+        assert_eq!(rtl.zoom_bar.right(), body.right());
+        assert_eq!(rtl.settings.right(), rtl.folders.left(), "the panes stay side by side");
+        assert_eq!(rtl.folders.right(), rtl.preview.left());
+        assert_eq!(ltr.settings.width(), rtl.settings.width(), "the panes keep their widths");
+        assert_eq!(ltr.folders.width(), rtl.folders.width());
+        assert_eq!(ltr.preview.width(), rtl.preview.width());
+    }
+
+    #[test]
+    fn the_stack_row_keeps_the_eye_at_the_reading_start() {
+        let row = ERect::from_min_size(pos2(10.0, 100.0), vec2(266.0, 24.0));
+        let (eye, name_at, _) = stack_row_parts(row, false);
+        assert_eq!(eye.left(), row.left() + 4.0);
+        assert!(name_at.x > eye.right(), "the name follows the eye");
+        let (eye, name_at, _) = stack_row_parts(row, true);
+        assert_eq!(eye.right(), row.right() - 4.0);
+        assert!(name_at.x < eye.left(), "the name follows the eye");
+    }
+}
