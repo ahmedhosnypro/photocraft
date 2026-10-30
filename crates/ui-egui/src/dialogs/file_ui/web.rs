@@ -602,7 +602,7 @@ pub(super) fn download_for_web(app: &mut PhotocraftApp, mut p: Value) -> Result<
 mod rtl_tests {
     use super::*;
     use egui::accesskit::Role;
-    use egui_kittest::{Harness, kittest::Queryable};
+    use egui_kittest::{Harness, kittest::{NodeT, Queryable}};
 
     /// A document to draw the Save for Web body over.
     fn app() -> PhotocraftApp {
@@ -620,7 +620,7 @@ mod rtl_tests {
     }
 
     /// The preview pane's rect, as the body recorded it.
-    fn preview<T>(h: &Harness<'_, T>) -> egui::Rect {
+    fn preview(h: &Harness<'_, (PhotocraftApp, Map<String, Value>)>) -> egui::Rect {
         let r = &h.state().1["__previewRects"][0];
         let x = |i: usize| r.get(i).and_then(Value::as_f64).unwrap_or_default() as f32;
         egui::Rect::from_min_max(egui::pos2(x(0), x(1)), egui::pos2(x(2), x(3)))
