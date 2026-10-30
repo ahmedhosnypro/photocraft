@@ -45,18 +45,31 @@ pub(super) fn opacity_row_layout(available: f32, label_width: f32, gap: f32) -> 
     ((available - reserved).max(40.0), show_label)
 }
 
+/// The blend and lock rows read in the panel's direction. The dock hands the panel a
+/// `top_down(Align::Min)` body, where the direction flag alone leaves a nested row
+/// left-to-right, so the rows carry their own layout.
+fn panel_row() -> egui::Layout {
+    crate::direction::row()
+}
+
+/// The opacity and fill fields sit at the row's reading end: the right in LTR, the left in
+/// Arabic.
+fn field_row() -> egui::Layout {
+    crate::direction::trailing()
+}
+
 /// Blend mode, Opacity, the locks and Fill with no layer selected: Photoshop keeps them in place,
 /// greyed out at Normal, 100% and unlocked, instead of removing them (#8880). Same layout as the
 /// active layer's rows in `layers`.
 fn inactive_blend_rows(ui: &mut egui::Ui, pro: bool) {
     ui.add_enabled_ui(false, |ui| {
-        ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(egui::vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y), panel_row(), |ui| {
             let opacity_label = if pro { tl!("Opacity:") } else { tl!("Opacity") };
             let (blend_width, show_opacity_label) = opacity_row_layout(ui.available_width(), body_text_width(ui, opacity_label), ui.spacing().item_spacing.x);
             let mut m = BlendMode::Normal;
             let options = blend_options(false, m);
             widgets::dropdown_wheel_hovered(ui, "blend", tl!("Blend Mode"), &mut m, &options, blend_width);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(field_row(), |ui| {
                 let mut o = 100.0;
                 widgets::popup_value_field(ui, opacity_label, &mut o, 0.0..=100.0, "%", LAYER_PCT_W);
                 if show_opacity_label {
@@ -65,7 +78,7 @@ fn inactive_blend_rows(ui: &mut egui::Ui, pro: bool) {
             });
         });
         ui.add_space((theme::ROW_GAP - ui.spacing().item_spacing.y).max(0.0));
-        ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(egui::vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y), panel_row(), |ui| {
             let lock_label = if pro { tl!("Lock:") } else { tl!("Lock") };
             let lang = crate::i18n::current();
             let fill_label = if pro { crate::i18n::tr_ctx(lang, "layers", "Fill:") } else { crate::i18n::tr_ctx(lang, "layers", "Fill") };
@@ -91,7 +104,7 @@ fn inactive_blend_rows(ui: &mut egui::Ui, pro: bool) {
             } else {
                 icons::button(ui, "lock-open", 22.0, false, tl!("Lock layer"));
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(field_row(), |ui| {
                 let mut f = 100.0;
                 widgets::popup_value_field(ui, fill_label, &mut f, 0.0..=100.0, "%", LAYER_PCT_W);
                 scrub_pct_label(ui, fill_label, &mut f, ui.available_width());
@@ -140,7 +153,7 @@ pub(super) fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         let bg = crate::doc_props_ui::is_background(&doc, l);
         // Pass Through is a group's mode: offered only when every target is a group.
         let all_groups = ids.iter().all(|id| doc.layer(*id).is_some_and(|x| x.is_group()));
-        ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(egui::vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y), panel_row(), |ui| {
             ui.add_enabled_ui(!bg, |ui| {
                 let mut m = l.blend;
                 // Reserve space for the numeric field first. On a narrow dock, hide the
@@ -159,7 +172,7 @@ pub(super) fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 }
                 // Hovering a mode previews it on the canvas (#970).
                 crate::blend_preview::hover(app, &ids, hovered.filter(|_| chosen.is_empty()));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.with_layout(field_row(), |ui| {
                     let mut o = l.opacity * 100.0;
                     let field = widgets::popup_value_field(ui, opacity_label, &mut o, 0.0..=100.0, "%", LAYER_PCT_W);
                     // On a narrow dock the (scrubby) label yields its room to the controls (#2309).
@@ -176,7 +189,7 @@ pub(super) fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         });
         // Docks zero the item spacing: keep the Opacity and Fill fields apart (#155).
         ui.add_space((theme::ROW_GAP - ui.spacing().item_spacing.y).max(0.0));
-        ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(egui::vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y), panel_row(), |ui| {
             let lock_label = if t.pro { tl!("Lock:") } else { tl!("Lock") };
             // Layer fill opacity (≠ Edit › Fill / path fill → Tô).
             let lang = crate::i18n::current();
@@ -219,7 +232,7 @@ pub(super) fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 }
             }
             ui.add_enabled_ui(!bg, |ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.with_layout(field_row(), |ui| {
                     let mut f = l.fill_opacity * 100.0;
                     let field = widgets::popup_value_field(ui, fill_label, &mut f, 0.0..=100.0, "%", LAYER_PCT_W);
                     let scrub = scrub_pct_label(ui, fill_label, &mut f, ui.available_width());
@@ -590,4 +603,23 @@ fn fx_button(ui: &mut egui::Ui, size: f32, tip: &str) -> egui::Response {
 
 pub(super) fn channels(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     crate::channels_panel::show(app, ui);
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::direction::{Dir, direction_scope};
+
+    use super::{field_row, panel_row};
+
+    #[test]
+    fn blend_rows_follow_the_reading_direction() {
+        let ltr = direction_scope(Dir::Ltr);
+        assert_eq!(panel_row().main_dir(), egui::Direction::LeftToRight);
+        // The field sits at the row's reading end: the right in LTR.
+        assert_eq!(field_row().main_dir(), egui::Direction::RightToLeft);
+        drop(ltr);
+        let _rtl = direction_scope(Dir::Rtl);
+        assert_eq!(panel_row().main_dir(), egui::Direction::RightToLeft);
+        assert_eq!(field_row().main_dir(), egui::Direction::LeftToRight);
+    }
 }
