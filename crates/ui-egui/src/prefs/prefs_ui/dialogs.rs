@@ -198,14 +198,22 @@ pub(super) fn toolbar_tab(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
             for tool in crate::state::Tool::ALL {
                 let name = format!("{tool:?}");
                 let mut on = !hidden.contains(&name);
-                crate::widgets::checkbox(ui, &mut on, tl!(tool.label()));
-                if on {
-                    hidden.retain(|h| *h != name);
-                } else if !hidden.contains(&name) {
-                    hidden.push(name);
-                }
                 let k = tool.key();
-                ui.label(if k == '\0' { String::new() } else { k.to_string() });
+                // Grid columns always advance left to right, so emit them in reading order.
+                crate::direction::grid_cells(
+                    ui,
+                    |ui| {
+                        crate::widgets::checkbox(ui, &mut on, tl!(tool.label()));
+                        if on {
+                            hidden.retain(|h| *h != name);
+                        } else if !hidden.contains(&name) {
+                            hidden.push(name);
+                        }
+                    },
+                    |ui| {
+                        ui.label(if k == '\0' { String::new() } else { k.to_string() });
+                    },
+                );
                 ui.end_row();
             }
         });
