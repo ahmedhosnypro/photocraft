@@ -332,11 +332,19 @@ mod rtl_tests {
 
         let drive_new = |dir| {
             let mut h = duplicate_layer(dir);
-            h.query_by_label("Document").expect("the Document dropdown").click();
-            h.run_steps(2);
-            h.query_by_label("New").expect("the New option").click();
-            h.run_steps(4);
-            assert_eq!(h.state().ui.dialogs.last().unwrap().fields["destination"], "new", "the dropdown chose New");
+            // Press the box, drag onto the New option, release there: the dropdown's
+            // press-drag-release gesture (#2735).
+            let box_at = h.query_by_label("Document").expect("the Document dropdown").rect().center();
+            h.hover_at(box_at);
+            h.run_steps(1);
+            h.drag_at(box_at);
+            h.run_steps(3);
+            let new_at = h.query_by_label("New").expect("the list opened on the press").rect().center();
+            h.hover_at(new_at);
+            h.run_steps(1);
+            h.drop_at(new_at);
+            h.run_steps(3);
+            assert_eq!(h.state().ui.dialogs.last().unwrap().fields["destination"], "new", "releasing on New picked it");
             h
         };
         let ltr = captions(&drive_new(crate::text::direction::Dir::Ltr), false);
