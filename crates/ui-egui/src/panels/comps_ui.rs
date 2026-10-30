@@ -602,20 +602,70 @@ mod tests {
         let mut app = PhotocraftApp::new(Session::new(), crate::Services::default());
         app.run("file.new", json!({"width": 16, "height": 16})).unwrap();
         let mut h = Harness::builder().with_size(vec2(360.0, 300.0)).build_ui_state(|ui, app| panel(app, ui), app);
+        let labels = [
+            "Apply previous selected layer comp",
+            "Apply next selected layer comp",
+            "Delete layer comp",
+            "Create new layer comp",
+            "Update layer comp (visibility, position and appearance)",
+        ];
+        let rects = |h: &Harness<'_, PhotocraftApp>| labels.map(|l| h.get_by_label(l).rect());
         h.run_steps(3);
-        let prev = h.get_by_label("Apply previous selected layer comp").rect();
-        let next = h.get_by_label("Apply next selected layer comp").rect();
-        let delete = h.get_by_label("Delete layer comp").rect();
+        let [prev, next, delete, new, update] = rects(&h);
         assert!(prev.left() < next.left(), "LTR: the previous button comes first, at the left");
-        assert!(delete.left() > prev.right(), "LTR: the action cluster trails the previous button");
+        // LTR: the trailing cluster sits at the far right, in reading order update, new, delete.
+        assert!(
+            next.right() < update.left() && update.left() < new.left() && new.left() < delete.left(),
+            "LTR: update, new, delete pack at the right end in reading order"
+        );
         {
             let _rtl = crate::direction::direction_scope(crate::direction::Dir::Rtl);
             h.run_steps(3);
-            let prev = h.get_by_label("Apply previous selected layer comp").rect();
-            let next = h.get_by_label("Apply next selected layer comp").rect();
-            let delete = h.get_by_label("Delete layer comp").rect();
+            let [prev, next, delete, new, update] = rects(&h);
             assert!(prev.right() > next.right(), "RTL: the previous button comes first, at the right");
-            assert!(delete.right() < prev.left(), "RTL: the action cluster leads the previous button");
+            // RTL: the same reading order update, new, delete, packed from the far left.
+            assert!(
+                update.right() < prev.left() && delete.left() < new.left() && new.left() < update.left(),
+                "RTL: update, new, delete pack at the left end in reading order"
+            );
         }
+    }
+
+    #[test]
+    fn the_rename_field_mirrors_about_the_row_centre_in_rtl() {
+        // Pins the mirrored row geometry through a real direction scope, via the one queryable
+        // row element: the rename TextInput's rect.
+        use egui_kittest::{Harness, kittest::Queryable};
+        let mut app = PhotocraftApp::new(Session::new(), crate::Services::default());
+        app.run("file.new", json!({"width": 16, "height": 16})).unwrap();
+        app.run("layerComp.new", json!({"name": "Hero"})).unwrap();
+        let mut h = Harness::builder().with_size(vec2(360.0, 300.0)).with_step_dt(1.0 / 60.0).build_ui_state(|ui, app| panel(app, ui), app);
+        h.run_steps(3);
+        let double_click = |h: &mut Harness<'_, PhotocraftApp>, pos: egui::Pos2| {
+            h.event(egui::Event::PointerMoved(pos));
+            // Wait out the double-click window of the previous attempt.
+            h.run_steps(30);
+            for pressed in [true, false, true, false] {
+                h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+                h.step();
+            }
+            h.run_steps(3);
+        };
+        let field_rect = |h: &mut Harness<'_, PhotocraftApp>| h.query_all_by_role(egui::accesskit::Role::TextInput).next().map(|n| n.rect()).unwrap();
+        let row = h.get_by_label("Hero").rect();
+        double_click(&mut h, pos2(row.left() + 35.0, row.center().y));
+        let ltr = field_rect(&mut h);
+        h.key_press(egui::Key::Escape);
+        h.run_steps(3);
+        let rtl_field;
+        {
+            let _rtl = crate::direction::direction_scope(crate::direction::Dir::Rtl);
+            h.run_steps(3);
+            double_click(&mut h, pos2(row.right() - 45.0, row.center().y));
+            rtl_field = field_rect(&mut h);
+        }
+        let mirror = row.left() + row.right() - ltr.center().x;
+        assert!((rtl_field.center().x - mirror).abs() < 0.5, "the rename field mirrors about the row centre: LTR {ltr:?}, RTL {rtl_field:?}");
+        assert!(rtl_field.left() > ltr.left() && rtl_field.right() > ltr.right(), "RTL: the field hugs the reading-start (right) side of the row");
     }
 }
