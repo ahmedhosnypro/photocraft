@@ -586,7 +586,7 @@ fn footer_menu_button(ui: &mut egui::Ui, icon: &str, size: f32, tip: &str) -> eg
 }
 
 /// Photoshop's italic "fx" footer button (no icon-font equivalent).
-pub(crate) fn fx_button(ui: &mut egui::Ui, size: f32, tip: &str) -> egui::Response {
+fn fx_button(ui: &mut egui::Ui, size: f32, tip: &str) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(size, size), Sense::click());
     if resp.hovered() {
@@ -621,5 +621,43 @@ mod tests {
         let _rtl = direction_scope(Dir::Rtl);
         assert_eq!(panel_row().main_dir(), egui::Direction::RightToLeft);
         assert_eq!(field_row().main_dir(), egui::Direction::LeftToRight);
+    }
+
+    /// The rows themselves, not just the helpers: rendered, the blend dropdown sits at the row's
+    /// reading start and the Opacity field at its reading end.
+    #[test]
+    fn blend_row_widgets_mirror_with_the_direction() {
+        use egui_kittest::kittest::Queryable;
+
+        let _lang = crate::i18n::language_scope(crate::i18n::Lang::EN);
+        for dir in [Dir::Ltr, Dir::Rtl] {
+            let _dir = direction_scope(dir);
+            let mut h = egui_kittest::Harness::builder()
+                .with_size(egui::vec2(420.0, 160.0))
+                .build_ui_state(
+                    |ui, row: &mut Option<egui::Rect>| {
+                        *row = Some(ui.max_rect());
+                        super::inactive_blend_rows(ui, true);
+                    },
+                    None,
+                );
+            h.run_steps(3);
+            let row = (*h.state()).expect("the row's rect was recorded");
+            let blend = h.query_all_by_label("Blend Mode").next().expect("the blend dropdown is drawn").rect();
+            // The Opacity field and its ▾ share the accessible name; the field is the wider one.
+            let opacity = h
+                .query_all_by_label("Opacity")
+                .map(|n| n.rect())
+                .max_by(|a, b| a.width().total_cmp(&b.width()))
+                .expect("the Opacity field is drawn");
+            if dir == Dir::Ltr {
+                assert!(blend.center().x < opacity.center().x, "LTR: dropdown left of the field: {blend:?} {opacity:?}");
+                assert!((opacity.right() - row.right()).abs() < 2.0, "LTR: the field hugs the row's right end: {opacity:?} {row:?}");
+            } else {
+                assert!(opacity.center().x < blend.center().x, "RTL: the field is left of the dropdown: {blend:?} {opacity:?}");
+                assert!((opacity.left() - row.left()).abs() < 2.0, "RTL: the field hugs the row's left end: {opacity:?} {row:?}");
+                assert!((blend.right() - row.right()).abs() < 2.0, "RTL: the dropdown hugs the row's right end: {blend:?} {row:?}");
+            }
+        }
     }
 }
