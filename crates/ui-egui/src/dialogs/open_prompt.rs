@@ -285,39 +285,21 @@ mod tests {
         fields.insert("message".into(), json!("Damaged document"));
         fields.insert("warnings".into(), json!(["Layer 3 could not be read"]));
         let area = std::cell::Cell::new(egui::Rect::ZERO);
-        let mut h = egui_kittest::Harness::builder()
-            .with_size(egui::vec2(400.0, 300.0))
-            .build_ui(|ui| {
-                area.set(ui.max_rect());
-                damage_body(ui, &fields);
-            });
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(400.0, 300.0)).build_ui(|ui| {
+            area.set(ui.max_rect());
+            damage_body(ui, &fields);
+        });
         h.run();
-        (
-            h.get_by_label("Damaged document").rect(),
-            h.get_by_label("Layer 3 could not be read").rect(),
-            area.get(),
-        )
+        (h.get_by_label("Damaged document").rect(), h.get_by_label("Layer 3 could not be read").rect(), area.get())
     }
 
     #[test]
     fn the_prompt_reads_from_the_reading_start() {
         let (message, warning, area) = prompt(crate::text::direction::Dir::Ltr);
-        assert!(
-            (message.left() - area.left()).abs() < 1.0,
-            "left-to-right: the message starts at the left edge: {message:?} in {area:?}"
-        );
-        assert!(
-            (warning.left() - area.left()).abs() < 1.0,
-            "left-to-right: the warnings list starts at the left edge: {warning:?} in {area:?}"
-        );
+        assert!((message.left() - area.left()).abs() < 1.0, "left-to-right: the message starts at the left edge: {message:?} in {area:?}");
+        assert!((warning.left() - area.left()).abs() < 1.0, "left-to-right: the warnings list starts at the left edge: {warning:?} in {area:?}");
         let (message, warning, area) = prompt(crate::text::direction::Dir::Rtl);
-        assert!(
-            (message.right() - area.right()).abs() < 1.0,
-            "right-to-left: the message ends at the right edge: {message:?} in {area:?}"
-        );
-        assert!(
-            (warning.right() - area.right()).abs() < 1.0,
-            "right-to-left: the warnings list ends at the right edge: {warning:?} in {area:?}"
-        );
+        assert!((message.right() - area.right()).abs() < 1.0, "right-to-left: the message ends at the right edge: {message:?} in {area:?}");
+        assert!((warning.right() - area.right()).abs() < 1.0, "right-to-left: the warnings list ends at the right edge: {warning:?} in {area:?}");
     }
 }
