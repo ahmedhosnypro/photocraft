@@ -420,6 +420,6 @@ fn canvas_point_mapping_is_rtl_invariant() {
     };
     assert_eq!(rtl, ltr, "the mapping is unchanged under RTL");
     for ((p, d), m) in points.iter().zip(ltr.0.iter()).zip(ltr.1.iter()) {
-        assert_eq!(*d, *m, "doc_point_at agrees with the view transform at {p:?}");
+        assert_eq!(*d, Some(*m), "doc_point_at agrees with the view transform at {p:?}");
     }
 }
