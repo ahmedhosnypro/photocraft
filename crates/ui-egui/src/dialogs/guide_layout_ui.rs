@@ -270,7 +270,9 @@ fn axis(ui: &mut egui::Ui, f: &mut Map<String, Value>, rows: bool) {
         ui.add_enabled_ui(enabled, |ui| {
             if crate::direction::is_rtl() {
                 // The fork's `Grid` is not ready for right-to-left layouts (its available width
-                // goes NaN), so the rows are drawn by hand in reading order.
+                // goes NaN), so the rows are drawn by hand in reading order, keeping the grid's
+                // 6 pt row spacing.
+                ui.spacing_mut().item_spacing.y = 6.0;
                 let label_w = label_width(ui, &[tl!("Number"), size_label, tl!("Spacing")]);
                 settings_line(ui, label_w, tl!("Number"), |ui, _| number(ui, f, count, "Number", true));
                 settings_line(ui, label_w, size_label, |ui, label| optional(ui, f, size, label.id));
@@ -334,6 +336,9 @@ fn main_fields(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value
             options.push(("selectedArtboards".into(), "Selected Artboards"));
         }
         let label_w = label_width(ui, &[tl!("Preset:"), tl!("Target:")]);
+        // The hand-drawn rows keep the grid's 6 pt row spacing; the rest of the body does not.
+        let row_gap = ui.spacing().item_spacing.y;
+        ui.spacing_mut().item_spacing.y = 6.0;
         settings_line(ui, label_w, tl!("Preset:"), |ui, _| {
             if widgets::dropdown(ui, "guide-preset", tl!("Preset:"), &mut preset, &presets(), 222.0) {
                 f.insert("__preset".into(), json!(preset));
@@ -345,6 +350,7 @@ fn main_fields(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value
                 f.insert("target".into(), json!(target));
             }
         });
+        ui.spacing_mut().item_spacing.y = row_gap;
     } else {
         egui::Grid::new("guide-header").spacing([8.0, 6.0]).show(ui, |ui| {
             ui.label(tl!("Preset:"));
@@ -448,17 +454,17 @@ pub fn body(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>, 
                 check(ui, f, "__preview", tl!("Preview"), true);
             });
         });
+        match calculate(app, f) {
+            Ok(guides) => {
+                f.insert("__previewGuides".into(), json!(guides));
+                f.insert("__previewParams".into(), params(f));
+                f.insert("__previewSource".into(), source(app));
+            }
+            Err(error) => {
+                ui.colored_label(Tokens::get(ui.ctx()).text_dim, tl!("Invalid guide layout")).on_hover_text(error);
+            }
+        }
     });
-    match calculate(app, f) {
-        Ok(guides) => {
-            f.insert("__previewGuides".into(), json!(guides));
-            f.insert("__previewParams".into(), params(f));
-            f.insert("__previewSource".into(), source(app));
-        }
-        Err(error) => {
-            ui.colored_label(Tokens::get(ui.ctx()).text_dim, tl!("Invalid guide layout")).on_hover_text(error);
-        }
-    }
     if outcome.is_none() && interactive && validate(app, f).is_ok() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
         outcome = Some(true);
     }
