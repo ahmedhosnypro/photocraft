@@ -70,16 +70,16 @@ fn field_box(h: &Harness<'_, SectionState>, number: Rect) -> Rect {
 
 /// A sampled tip, so the Size row offers its "Restore original size" button.
 fn sampled_brush() -> BrushSettings {
-    let mut b = BrushSettings::default();
-    b.tip = paint::TipShape::Sampled(paint::GrayTile::from_fn(8, 8, |_, _| 1.0));
-    b.size = 77.0;
-    b
+    BrushSettings {
+        tip: paint::TipShape::Sampled(paint::GrayTile::from_fn(8, 8, |_, _| 1.0)),
+        size: 77.0,
+        ..Default::default()
+    }
 }
 
 /// A preset whose tip size is distinct, so the grid's painted size numbers identify it.
 fn preset(name: &str, size: f32) -> BrushPreset {
-    let mut brush = BrushSettings::default();
-    brush.size = size;
+    let brush = BrushSettings { size, ..Default::default() };
     BrushPreset {
         name: name.to_string(),
         brush,
