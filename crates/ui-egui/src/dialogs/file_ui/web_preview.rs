@@ -370,12 +370,15 @@ mod tests {
     fn colour_table_footer_reads_in_the_ui_direction() {
         let row = |dir| {
             let _scope = crate::direction::direction_scope(dir);
-            let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(400.0, 300.0)).build_ui_state(
-                |ui, state: &mut Map<String, Value>| {
-                    table(ui, state);
-                },
-                serde_json::from_value::<Map<String, Value>>(json!({"format": "gif", "colorTable": ["#ff0000", "#0000ff"], "dither": "none"})).unwrap(),
-            );
+            let mut h = egui_kittest::Harness::builder()
+                .with_size(egui::vec2(400.0, 300.0))
+                .with_context_setup(|ctx| PhotocraftApp::setup_context(ctx, crate::theme::ThemeKind::ALL[0]))
+                .build_ui_state(
+                    |ui, state: &mut Map<String, Value>| {
+                        table(ui, state);
+                    },
+                    serde_json::from_value::<Map<String, Value>>(json!({"format": "gif", "colorTable": ["#ff0000", "#0000ff"], "dither": "none"})).unwrap(),
+                );
             h.run_steps(2);
             (text_x(&h, "Colors: 2"), text_x(&h, "Reset"))
         };
