@@ -101,7 +101,8 @@ pub(super) fn row(
     disp: &mut Value,
 ) {
     let t = Tokens::get(ui.ctx());
-    ui.horizontal(|ui| {
+    // The row reads in the UI's direction: the label at the reading start, the picker at the end.
+    ui.with_layout(crate::direction::row(), |ui| {
         if label.is_empty() {
             ui.add_space(16.0);
         } else {
@@ -180,15 +181,18 @@ pub(super) fn row(
                 });
             }
             ui.separator();
-            if ui.button(tl!("Load Contours…")).clicked() {
-                act = Some(Act::Load);
-            }
-            if ui.button(tl!("Replace Contours…")).clicked() {
-                act = Some(Act::Replace);
-            }
-            if ui.add_enabled(!user.is_empty(), egui::Button::new(tl!("Save Contours…"))).clicked() {
-                act = Some(Act::Save);
-            }
+            // The actions read from the reading start: right-aligned in a right-to-left UI.
+            ui.scope_builder(egui::UiBuilder::new().layout(crate::direction::body_layout()), |ui| {
+                if ui.button(tl!("Load Contours…")).clicked() {
+                    act = Some(Act::Load);
+                }
+                if ui.button(tl!("Replace Contours…")).clicked() {
+                    act = Some(Act::Replace);
+                }
+                if ui.add_enabled(!user.is_empty(), egui::Button::new(tl!("Save Contours…"))).clicked() {
+                    act = Some(Act::Save);
+                }
+            });
         });
         if let Some(name) = delete {
             let r = app.run("layer.layerStyle.contours.delete", json!({"name": name}));
@@ -341,11 +345,16 @@ pub(super) fn editor(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<Str
     let mut new_clicked = false;
     let mut commit_name = false;
     let mut preset: Option<String> = None;
-    let modal = egui::Modal::new(mem.with("modal")).show(&ctx, |ui| {
+    // The editor's own modal reads in the UI's direction: the title at the reading start, the
+    // graph and the buttons in reading order. The area's layout reaches the frame's content.
+    let area = egui::Modal::default_area(mem.with("modal")).layout(crate::direction::body_layout());
+    let modal = egui::Modal::new(mem.with("modal")).area(area).show(&ctx, |ui| {
         ui.label(RichText::new(tl!("Contour Editor")).font(crate::theme::semibold(14.0)).color(t.text));
         ui.add_space(6.0);
         ui.horizontal_top(|ui| {
-            ui.vertical(|ui| {
+            // The column mirrors with the UI: its blocks sit at the reading start and its rows
+            // read in the UI's direction.
+            ui.scope_builder(egui::UiBuilder::new().layout(crate::direction::body_layout()), |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(tl!("Preset:")).color(t.text_dim));
                     let mut cur = name_of(&c).to_string();
@@ -440,7 +449,8 @@ pub(super) fn editor(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<Str
                 });
             });
             ui.add_space(10.0);
-            ui.vertical(|ui| {
+            // The action column mirrors with the UI: its buttons sit at the reading start.
+            ui.scope_builder(egui::UiBuilder::new().layout(crate::direction::body_layout()), |ui| {
                 if widgets::primary_button(ui, tl!("OK"), 84.0).clicked() {
                     close = Some(true);
                 }
@@ -586,5 +596,38 @@ mod library_tests {
         assert!(!fields.contains_key(EDITOR));
         assert!(ctx.data(|d| d.get_temp::<String>(naming)).is_none());
         assert!(app.session.presets.contours.is_empty());
+    }
+
+    /// The Contour Editor follows the UI's direction: the graph column sits at the reading start
+    /// and the action column at the reading end — the left in a right-to-left UI.
+    #[test]
+    fn the_contour_editor_columns_follow_the_ui_direction() {
+        use egui_kittest::kittest::Queryable;
+        let columns = |dir: crate::direction::Dir| -> (egui::Rect, egui::Rect) {
+            let _dir = crate::direction::direction_scope(dir);
+            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+            app.run("file.new", json!({"width": 32, "height": 32})).unwrap();
+            app.run("layer.new.layer", json!({})).unwrap();
+            app.run("layer.layerStyle.dropShadow", json!({})).unwrap();
+            let st = app.session.active().unwrap();
+            let mut fields = crate::layer_style::initial_fields(st.doc.layer(st.active_layer.unwrap()).unwrap(), None, 120.0);
+            open_editor(&mut fields, "fx1", "contour");
+            let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1280.0, 800.0)).build_ui_state(
+                |ui, (app, fields): &mut (PhotocraftApp, Map<String, Value>)| {
+                    if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                        editor(app, ui, fields);
+                    }
+                },
+                (app, fields),
+            );
+            PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+            h.run_steps(4);
+            let labelled = |label: &str| h.query_all_by_label(label).next().expect(label).rect();
+            (labelled("Preset:"), labelled("OK"))
+        };
+        let (ltr_preset, ltr_ok) = columns(crate::direction::Dir::Ltr);
+        assert!(ltr_ok.left() > ltr_preset.left(), "the actions follow the graph: {ltr_ok:?} {ltr_preset:?}");
+        let (rtl_preset, rtl_ok) = columns(crate::direction::Dir::Rtl);
+        assert!(rtl_ok.right() < rtl_preset.right(), "the actions lead in a right-to-left UI: {rtl_ok:?} {rtl_preset:?}");
     }
 }
