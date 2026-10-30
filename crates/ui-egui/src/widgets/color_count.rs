@@ -51,13 +51,9 @@ pub fn color_count_row(ui: &mut Ui, label: &str, count: &mut u32) -> Response {
             if !t.bevel {
                 ui.painter().rect_stroke(rect, t.radius_sm, Stroke::new(1.0, t.field_border), StrokeKind::Inside);
             }
-            // The digits stay left-to-right; the box mirrors its inner alignment so the
-            // number keeps its place next to the caption.
-            let builder = egui::UiBuilder::new().max_rect(rect.shrink2(vec2(4.0, 2.0))).layout(egui::Layout::top_down(if rtl {
-                egui::Align::Max
-            } else {
-                egui::Align::Min
-            }));
+            // The digits stay left-to-right; the box inherits the scope's mirrored layout
+            // so the number keeps the position it had in a left-to-right UI.
+            let builder = egui::UiBuilder::new().max_rect(rect.shrink2(vec2(4.0, 2.0)));
             let mut child = ui.new_child(builder);
             child.style_mut().visuals.widgets.inactive.bg_fill = Color32::TRANSPARENT;
             child.style_mut().visuals.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
@@ -197,6 +193,26 @@ mod tests {
                 assert!(field.right() < 160.0, "{dir:?}: field at the reading end, got {field:?}");
             } else {
                 assert!(field.left() > 160.0, "{dir:?}: field at the reading end, got {field:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_number_sits_at_the_reading_end_of_its_box() {
+        for (dir, at_right) in [(crate::direction::Dir::Ltr, true), (crate::direction::Dir::Rtl, false)] {
+            let _guard = crate::direction::direction_scope(dir);
+            let mut harness = Harness::builder().with_size(vec2(320.0, 100.0)).build_ui_state(
+                |ui, count: &mut u32| {
+                    color_count_row(ui, "Colors", count);
+                },
+                64,
+            );
+            harness.run();
+            let spin = harness.get_by_role(egui::accesskit::Role::SpinButton).rect();
+            if at_right {
+                assert!(spin.right() > 300.0, "{dir:?}: number at the box's right end, got {spin:?}");
+            } else {
+                assert!(spin.left() < 20.0, "{dir:?}: number at the box's left end, got {spin:?}");
             }
         }
     }
