@@ -245,7 +245,7 @@ fn triangle_in(h: &Harness<'_, PhotocraftApp>, row: egui::Rect) -> Option<Vec<Po
 fn walk(shape: &egui::Shape, row: egui::Rect, found: &mut Option<Vec<Pos2>>) {
     match shape {
         egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, row, found)),
-        egui::Shape::Path(p) if p.points.len() == 3 && p.points.iter().all(|q| row.contains(*q)) => {
+        egui::Shape::Path(p) if p.closed && p.points.len() == 3 && p.points.iter().all(|q| row.contains(*q)) => {
             *found = Some(p.points.clone());
         }
         _ => {}

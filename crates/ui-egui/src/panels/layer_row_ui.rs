@@ -281,10 +281,9 @@ pub fn paint_triangle(painter: &Painter, c: Pos2, open: bool, color: egui::Color
 /// `cy`, cut to fit the span: left-aligned at `x` in a left-to-right UI, right-aligned at the
 /// span's right end in a right-to-left one. Returns the painted rect.
 pub fn label(painter: &Painter, x: f32, cy: f32, right: f32, text: &str, font: FontId, color: egui::Color32) -> Option<Rect> {
-    if crate::direction::is_rtl() {
-        if x <= right {
-            return None;
-        }
+    // A mirrored span runs from the reading start (x) to the far limit (right); a span from a
+    // caller that has not been converted yet keeps the left-to-right contract.
+    if crate::direction::is_rtl() && x > right {
         let g = truncated(painter, text, font, color, false, x - right)?;
         let r = Align2::RIGHT_CENTER.anchor_size(pos2(x, cy), g.size());
         painter.galley(r.min, g, color);
