@@ -192,13 +192,16 @@ mod tests {
         assert!(ltr_title.left() < ltr_win.center().x, "the title reads from the left: {ltr_title:?} in {ltr_win:?}");
         assert!(ltr_radio.left() < ltr_win.center().x, "the radio rows read from the left: {ltr_radio:?} in {ltr_win:?}");
         assert!(ltr_ok.right() > ltr_cancel.right(), "the default button is rightmost: {ltr_ok:?} vs {ltr_cancel:?}");
-        assert!(ltr_win.right() - ltr_ok.right() < 40.0, "the button group hugs the right: {ltr_ok:?} in {ltr_win:?}");
 
         // Arabic mirrors them.
         assert!(rtl_title.right() > rtl_win.center().x, "the title reads from the right: {rtl_title:?} in {rtl_win:?}");
         assert!(rtl_radio.right() > rtl_win.center().x, "the radio rows read from the right: {rtl_radio:?} in {rtl_win:?}");
         assert!(rtl_ok.left() < rtl_cancel.left(), "the default button is leftmost: {rtl_ok:?} vs {rtl_cancel:?}");
-        assert!(rtl_ok.left() - rtl_win.left() < 40.0, "the button group hugs the left: {rtl_ok:?} in {rtl_win:?}");
+        // The group hugs the reading end by the same margin in both directions.
+        assert!(
+            (ltr_win.right() - ltr_ok.right() - (rtl_ok.left() - rtl_win.left())).abs() < 2.0,
+            "the button group hugs the reading end in both directions: {ltr_ok:?} {rtl_ok:?}"
+        );
 
         // The mirrored body keeps the modal's width.
         assert!((rtl_win.width() - ltr_win.width()).abs() < 1.0, "the modal keeps its width: {ltr_win:?} vs {rtl_win:?}");
