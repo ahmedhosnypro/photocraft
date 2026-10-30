@@ -47,10 +47,9 @@ fn rtl_the_rows_read_from_the_right() {
         (ltr_cap.center().x + rtl_cap.center().x - WINDOW).abs() < 2.0,
         "the Blending caption mirrors: {ltr_cap:?} / {rtl_cap:?}"
     );
-    // The dropdown keeps the field's side of the caption: right of the centre in a left-to-right
-    // row, left of it in a mirrored one.
-    assert!(ltr_drop.center().x > WINDOW / 2.0, "the dropdown sits right of the centre: {ltr_drop:?}");
-    assert!(rtl_drop.center().x < WINDOW / 2.0, "the dropdown sits left of the centre: {rtl_drop:?}");
+    // The row hugs the reading-start edge of the dialog, so mirroring carries the dropdown
+    // across the window's centre line: its RTL centre is right of its LTR one.
+    assert!(rtl_drop.center().x > ltr_drop.center().x, "the dropdown mirrors: {ltr_drop:?} / {rtl_drop:?}");
     // The section caption starts at the reading start: the left edge in a left-to-right dialog,
     // the right edge in a mirrored one.
     assert!(ltr_cap.left() < WINDOW / 2.0 && rtl_cap.right() > WINDOW / 2.0, "the caption reads from the right: {ltr_cap:?} / {rtl_cap:?}");
