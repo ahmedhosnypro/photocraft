@@ -277,19 +277,13 @@ fn theme_row(ui: &mut egui::Ui, title: &str, active: bool, selected: &mut String
             ui.horizontal(|ui| {
                 // Room for the favourite star badges on the swatch corners.
                 ui.spacing_mut().item_spacing.x = 6.0;
-                let rtl = crate::direction::is_rtl();
-                // The Grid cell's row stays physical, so the strip reads in reverse under RTL:
-                // the Active marker goes first (the reading end) and the first option ends up
-                // the rightmost one. The swatch paint itself never mirrors.
-                if rtl && active {
-                    ui.label(RichText::new(tl!("Active")).color(t.accent_text).small());
-                    ui.add_space(6.0);
+                // The cell's row reads with the body, so the first option lands at the reading
+                // start (the right in a right-to-left UI) and the Active marker, added last,
+                // ends up at the reading end. The swatch paint itself never mirrors.
+                for (id, kind) in options {
+                    theme_swatch(ui, *kind, id, selected, favorites);
                 }
-                for i in 0..options.len() {
-                    let (id, kind) = options[if rtl { options.len() - 1 - i } else { i }];
-                    theme_swatch(ui, kind, id, selected, favorites);
-                }
-                if !rtl && active {
+                if active {
                     ui.add_space(6.0);
                     ui.label(RichText::new(tl!("Active")).color(t.accent_text).small());
                 }
@@ -366,16 +360,21 @@ mod tests {
     /// `appearance_rows`, under the body's own direction.
     fn appearance_harness() -> Harness<'static, Map<String, Value>> {
         let fields = Map::new();
-        Harness::builder().with_size(vec2(520.0, 480.0)).build_ui_state(
-            |ui: &mut egui::Ui, f: &mut Map<String, Value>| {
-                ui.with_layout(body_layout(), |ui| {
-                    egui::Grid::new("appearance-grid").num_columns(2).show(ui, |ui| {
-                        appearance_rows(ui, f, Some(egui::Theme::Dark), AppearanceRows::matching(""));
+        // The app sets the direction flag with the style before its first frame; the widgets
+        // mirror on it, and a Grid's first sizing pass would otherwise cache LTR column widths.
+        Harness::builder()
+            .with_size(vec2(520.0, 480.0))
+            .with_context_setup(|ctx| crate::theme::set_direction(ctx, crate::direction::is_rtl()))
+            .build_ui_state(
+                |ui: &mut egui::Ui, f: &mut Map<String, Value>| {
+                    ui.with_layout(body_layout(), |ui| {
+                        egui::Grid::new("appearance-grid").num_columns(2).show(ui, |ui| {
+                            appearance_rows(ui, f, Some(egui::Theme::Dark), AppearanceRows::matching(""));
+                        });
                     });
-                });
-            },
-            fields,
-        )
+                },
+                fields,
+            )
     }
 
     /// The rect of one light-theme swatch, by its theme name.
@@ -411,43 +410,6 @@ mod tests {
         let badge = h.query_by_label(&format!("Add to favorites: {name}")).expect("the badge shows while the swatch is hovered").rect();
         let corner = first.right_top() + vec2(-3.0, 3.0);
         assert!((badge.center() - corner).length() < 1.0, "the badge keeps its physical corner: {badge:?} {first:?}");
-    }
-
-    /// Temporary debug: where does the NaN come from?
-    #[test]
-    fn debug_grid_cells_rtl() {
-        use egui_kittest::kittest::NodeT;
-        let _rtl = direction_scope(Dir::Rtl);
-        let mut h = Harness::builder().with_size(vec2(520.0, 480.0)).build_ui_state(
-            |ui: &mut egui::Ui, _: &mut Map<String, Value>| {
-                ui.with_layout(body_layout(), |ui| {
-                    egui::Grid::new("g-plain").num_columns(2).show(ui, |ui| {
-                        crate::direction::grid_cells(ui, |ui| { ui.label("PlainLabel"); }, |ui| { ui.label("PlainEditor"); });
-                        ui.end_row();
-                    });
-                    egui::Grid::new("g-combo").num_columns(2).show(ui, |ui| {
-                        crate::direction::grid_cells(ui, |ui| { ui.label("ComboLabel"); }, |ui| {
-                            let mut cur = "x".to_string();
-                            crate::widgets::dropdown(ui, "combo", "Combo", &mut cur, &[("x".to_string(), "X")], 220.0);
-                        });
-                        ui.end_row();
-                    });
-                    egui::Grid::new("g-combo-min").num_columns(2).min_col_width(150.0).show(ui, |ui| {
-                        crate::direction::grid_cells(ui, |ui| { ui.label("ComboMinLabel"); }, |ui| {
-                            let mut cur = "y".to_string();
-                            crate::widgets::dropdown(ui, "combo2", "Combo2", &mut cur, &[("y".to_string(), "Y")], 220.0);
-                        });
-                        ui.end_row();
-                    });
-                });
-            },
-            Map::new(),
-        );
-        h.run_steps(3);
-        for node in h.root().children_recursive() {
-            println!("{:?} {:?} {:?}", node.accesskit_node().role(), node.value(), node.accesskit_node().bounding_box());
-        }
-        panic!("dump");
     }
 
     /// The left-to-right twin: the label keeps its place at the left and the first swatch stays
