@@ -351,8 +351,11 @@ fn the_body_rows_mirror_in_a_right_to_left_ui() {
     assert!((l_axis - r_axis).abs() < 1.0, "the dialog sits at the same place in both directions: {l_axis} / {r_axis}");
     assert!(r_columns.left() > r_rows.right(), "RTL: the Columns group still leads, from the right: {r_columns:?} / {r_rows:?}");
     assert!(r_ok.right() < r_rows.left(), "RTL: the rail leads at the reading end: {r_ok:?} / {r_rows:?}");
+    // Every row mirrors about one common axis (the dialog frame's centre need not be it: the
+    // host's own chrome is not mirrored).
+    let axis = (l_columns.center().x + r_columns.center().x) / 2.0;
     for (name, ltr, rtl) in [("Columns", l_columns, r_columns), ("Rows", l_rows, r_rows), ("OK", l_ok, r_ok)] {
-        assert!((ltr.center().x + rtl.center().x - 2.0 * l_axis).abs() < 2.0, "{name} mirrors about the dialog centre: {ltr:?} / {rtl:?}");
+        assert!((ltr.center().x + rtl.center().x - 2.0 * axis).abs() < 2.0, "{name} mirrors about the same axis {axis}: {ltr:?} / {rtl:?}");
     }
 }
 
@@ -369,9 +372,9 @@ fn label_editor_pairs(dir: crate::text::direction::Dir) -> (Vec<(&'static str, e
     // The editors by their accessible label (a `:` caption names its dropdown without it).
     let mut editors: Vec<(&str, egui::Rect)> = Vec::new();
     for role in [Role::SpinButton, Role::TextInput, Role::ComboBox] {
-        for text in ["Preset", "Target", "Number", "Width", "Height", "Spacing"] {
+        for text in ["Preset:", "Target", "Number", "Width", "Height", "Spacing"] {
             for n in h.query_all_by_role_and_label(role, text) {
-                editors.push((text, n.rect()));
+                editors.push((text.trim_end_matches(':'), n.rect()));
             }
         }
     }
@@ -386,7 +389,7 @@ fn label_editor_pairs(dir: crate::text::direction::Dir) -> (Vec<(&'static str, e
                 .filter(|(l, r)| *l == key && (r.center().y - label.center().y).abs() < 5.0)
                 .map(|(_, r)| *r)
                 .min_by(|a, b| (a.center().x - label.center().x).abs().total_cmp(&(b.center().x - label.center().x).abs()))
-                .expect("an editor beside the settings label");
+                .unwrap_or_else(|| panic!("no editor beside the {text} label"));
             pairs.push((text, label, editor));
         }
     }
