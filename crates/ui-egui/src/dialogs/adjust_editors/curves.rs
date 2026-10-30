@@ -208,6 +208,16 @@ fn curves_mode_row(ui: &mut egui::Ui, v: &mut Value, key: &str, gray: bool) -> E
 }
 
 pub(super) fn curves(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
+    let mut edit = Edit::default();
+    // The panel is a dialog body: in a right-to-left UI its blocks hug the reading start and its
+    // rows read from the right. The graph keeps its physical left-to-right mapping — input on the
+    // left, output on the right — like a data plot, as Photoshop's Curves graph does.
+    ui.with_layout(crate::direction::body_layout(), |ui| edit = curves_body(ui, v, cx));
+    edit
+}
+
+/// The Curves panel, drawn inside the mirrored body scope.
+fn curves_body(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     let t = Tokens::get(ui.ctx());
     let space = space_of(v);
     let chans = tone_channels(space, cx.gray);
@@ -385,4 +395,87 @@ pub(super) fn curves(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
         e.changed = true;
     }
     e
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::direction::Dir;
+    use egui_kittest::kittest::Queryable;
+
+    /// The Curves panel over a fresh adjustment, drawn in `dir`.
+    fn harness(dir: Dir) -> egui_kittest::Harness<'static, Value> {
+        let _dir = crate::direction::direction_scope(dir);
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(380.0, 420.0)).build_ui_state(
+            |ui, v: &mut Value| {
+                let cx = EditorCx {
+                    mem: egui::Id::unique("curves-rtl"),
+                    hist: None,
+                    gray: false,
+                    swatches: [[0.0; 3], [1.0; 3]],
+                    gradients: Vec::new(),
+                    dialog: true,
+                    dynamic_color_sliders: true,
+                    isolated_curve: None,
+                };
+                curves(ui, v, &cx);
+            },
+            json!({}),
+        );
+        crate::PhotocraftApp::setup_context(&h.ctx, Default::default());
+        h.run_steps(4);
+        h
+    }
+
+    /// The rects of the nodes named `name`, top row first.
+    fn named(h: &egui_kittest::Harness<'_, Value>, name: &str) -> Vec<egui::Rect> {
+        let mut rs: Vec<egui::Rect> = h.query_all_by_label(name).map(|n| n.rect()).collect();
+        rs.sort_by(|a, b| a.top().total_cmp(&b.top()));
+        rs
+    }
+
+    /// The graph rect the panel reports for `h`'s memory id.
+    fn graph(h: &egui_kittest::Harness<'_, Value>) -> egui::Rect {
+        let id = egui::Id::unique("curves-rtl").with("curves-graph");
+        h.ctx.data(|d| d.get_temp::<egui::Rect>(id)).expect("the panel reports its graph rect")
+    }
+
+    /// The leftmost edge of the nodes named `name`.
+    fn leftmost(rs: &[egui::Rect]) -> f32 {
+        rs.iter().map(|r| r.left()).fold(f32::MAX, f32::min)
+    }
+
+    /// The rightmost edge of the nodes named `name`.
+    fn rightmost(rs: &[egui::Rect]) -> f32 {
+        rs.iter().map(|r| r.right()).fold(f32::MIN, f32::max)
+    }
+
+    /// The Curves panel mirrors its chrome in a right-to-left UI: the blocks hug the reading
+    /// start and the rows read from the right. The graph keeps its physical mapping, like a
+    /// data plot, so only the block that holds it moves.
+    #[test]
+    fn curves_panel_mirrors_its_chrome_under_rtl() {
+        let ltr = harness(Dir::Ltr);
+        let rtl = harness(Dir::Rtl);
+
+        let ltr_graph = graph(&ltr);
+        let rtl_graph = graph(&rtl);
+        assert!((ltr_graph.width() - rtl_graph.width()).abs() < 1.0, "the graph keeps its width: {ltr_graph:?} {rtl_graph:?}");
+        assert!(ltr_graph.left() < 40.0, "the graph starts at the left in LTR: {ltr_graph:?}");
+        assert!(rtl_graph.right() > 340.0, "the graph ends at the right in RTL: {rtl_graph:?}");
+
+        let ltr_ch = named(&ltr, "Channel:");
+        let rtl_ch = named(&rtl, "Channel:");
+        assert!(!ltr_ch.is_empty() && !rtl_ch.is_empty(), "the channel row is drawn");
+        assert!(leftmost(&ltr_ch) < 40.0, "the channel row starts at the left in LTR: {ltr_ch:?}");
+        assert!(rightmost(&rtl_ch) > 340.0, "the channel row starts at the right in RTL: {rtl_ch:?}");
+
+        let ltr_input = named(&ltr, "Input:");
+        let ltr_output = named(&ltr, "Output:");
+        let rtl_input = named(&rtl, "Input:");
+        let rtl_output = named(&rtl, "Output:");
+        assert!(!ltr_input.is_empty() && !ltr_output.is_empty(), "the value row is drawn");
+        assert!(rightmost(&ltr_input) < leftmost(&ltr_output), "the LTR row reads Input then Output: {ltr_input:?} {ltr_output:?}");
+        assert!(rightmost(&rtl_output) < leftmost(&rtl_input), "the RTL row reads Output then Input: {rtl_input:?} {rtl_output:?}");
+    }
 }
