@@ -197,15 +197,10 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
     let (mut ok, mut cancel) = (false, false);
     let (mut quality, mut format) = (p.quality, p.format);
     let modal = egui::Modal::new(egui::Id::unique("jpeg-options")).show(ctx, |ui| {
-        // The width cap hugs the modal's reading-start edge, so in RTL the mirrored body stays
-        // inside the dialog box rather than at the cap's far edge.
-        let area = ui.max_rect();
-        let w = 360.0_f32.min(area.width());
-        let x0 = if crate::direction::is_rtl() { area.right() - w } else { area.left() };
-        let col = egui::Rect::from_min_size(egui::pos2(x0, area.top()), egui::vec2(w, area.height()));
+        ui.set_max_width(360.0);
         // One direction-aware body: in LTR `body_layout()` is the Modal's own layout, so nothing
         // moves; in RTL the blocks right-align and every nested row mirrors.
-        ui.scope_builder(egui::UiBuilder::new().max_rect(col).layout(crate::direction::body_layout()), |ui| {
+        ui.scope_builder(egui::UiBuilder::new().max_rect(ui.max_rect()).layout(crate::direction::body_layout()), |ui| {
             ui.label(egui::RichText::new(tl!("JPEG Options")).font(crate::theme::semibold(15.0)));
             ui.add_space(4.0);
             crate::widgets::hairline(ui);
