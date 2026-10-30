@@ -2352,3 +2352,77 @@ fn preset_and_mismatch_rows_read_rtl() {
     assert!(rtl_radios.1[0].right() > ltr_radios.1[0].right(), "the answers sit at the reading start: {:?} {:?}", rtl_radios.1[0], ltr_radios.1[0]);
     assert!(ltr_radios.1[0].left() < rtl_radios.1[0].left(), "the answers keep their place: {:?} {:?}", ltr_radios.1[0], rtl_radios.1[0]);
 }
+
+/// The right-to-left settings grid: the labels of different lengths share their reading-start
+/// (right) edge, so the label column reads as one line.
+#[test]
+fn rtl_prefs_labels_share_their_reading_start_edge() {
+    use egui::accesskit::Role;
+    use egui_kittest::{Harness, kittest::Queryable};
+    let _rtl = crate::text::direction::direction_scope(crate::text::direction::Dir::Rtl);
+    let (mut app, _) = app_with_store();
+    open_preferences(&mut app, "interface");
+    let mut h = Harness::builder().with_size(vec2(1280.0, 800.0)).build_eframe(move |cc| {
+        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+        app
+    });
+    h.run_steps(4);
+    let language = h.query_all_by_role_and_label(Role::Label, "Language").next().expect("the Language label").rect();
+    let scale = h.query_all_by_role_and_label(Role::Label, "UI Scale").next().expect("the UI Scale label").rect();
+    assert!((language.right() - scale.right()).abs() < 0.5, "the labels share their right edge: {language:?} {scale:?}");
+}
+
+/// The left-to-right twin: the labels keep their shared left edge.
+#[test]
+fn ltr_prefs_labels_share_their_reading_start_edge() {
+    use egui::accesskit::Role;
+    use egui_kittest::{Harness, kittest::Queryable};
+    let (mut app, _) = app_with_store();
+    open_preferences(&mut app, "interface");
+    let mut h = Harness::builder().with_size(vec2(1280.0, 800.0)).build_eframe(move |cc| {
+        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+        app
+    });
+    h.run_steps(4);
+    let language = h.query_all_by_role_and_label(Role::Label, "Language").next().expect("the Language label").rect();
+    let scale = h.query_all_by_role_and_label(Role::Label, "UI Scale").next().expect("the UI Scale label").rect();
+    assert!((language.left() - scale.left()).abs() < 0.5, "the labels keep their left edge: {language:?} {scale:?}");
+}
+
+/// The right-to-left boolean row: the checkbox hugs the reading-start edge, where the other
+/// rows' labels sit.
+#[test]
+fn rtl_prefs_bool_row_sits_at_the_reading_start() {
+    use egui::accesskit::Role;
+    use egui_kittest::{Harness, kittest::Queryable};
+    let _rtl = crate::text::direction::direction_scope(crate::text::direction::Dir::Rtl);
+    let (mut app, _) = app_with_store();
+    open_preferences(&mut app, "interface");
+    let mut h = Harness::builder().with_size(vec2(1280.0, 800.0)).build_eframe(move |cc| {
+        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+        app
+    });
+    h.run_steps(4);
+    let checkbox = h.query_all_by_role_and_label(Role::CheckBox, "Show Tooltips").next().expect("the Show Tooltips checkbox").rect();
+    let language = h.query_all_by_role_and_label(Role::Label, "Language").next().expect("the Language label").rect();
+    assert!((checkbox.right() - language.right()).abs() < 1.0, "the checkbox shares the labels' reading-start edge: {checkbox:?} {language:?}");
+}
+
+/// The left-to-right twin: the checkbox keeps its place at the left edge of the row, just after
+/// the narrow empty cell that holds the row open.
+#[test]
+fn ltr_prefs_bool_row_keeps_its_place() {
+    use egui::accesskit::Role;
+    use egui_kittest::{Harness, kittest::Queryable};
+    let (mut app, _) = app_with_store();
+    open_preferences(&mut app, "interface");
+    let mut h = Harness::builder().with_size(vec2(1280.0, 800.0)).build_eframe(move |cc| {
+        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+        app
+    });
+    h.run_steps(4);
+    let checkbox = h.query_all_by_role_and_label(Role::CheckBox, "Show Tooltips").next().expect("the Show Tooltips checkbox").rect();
+    let language = h.query_all_by_role_and_label(Role::Label, "Language").next().expect("the Language label").rect();
+    assert!(checkbox.left() >= language.left(), "the checkbox keeps its place at the left edge: {checkbox:?} {language:?}");
+    assert!(checkbox.left() - language.left() < 32.0, "the checkbox hugs the left edge: {checkbox:?} {language:?}");
+}

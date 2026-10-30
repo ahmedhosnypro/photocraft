@@ -484,7 +484,9 @@ fn field_rows(ui: &mut egui::Ui, section: &str, obj: &mut Map<String, Value>, ke
                             });
                         })
                     } else {
-                        reading_start_cell(ui, |ui| crate::widgets::checkbox(ui, &mut b, &label))
+                        reading_start_cell(ui, |ui| {
+                            crate::widgets::checkbox(ui, &mut b, &label);
+                        })
                     }
                 };
                 if crate::text::direction::is_rtl() {
@@ -529,7 +531,7 @@ fn field_rows(ui: &mut egui::Ui, section: &str, obj: &mut Map<String, Value>, ke
                 crate::text::direction::grid_cells(
                     ui,
                     |ui| {
-                        ui.label(RichText::new(tl!(&label)).color(t.text_dim));
+                        field_label(ui, t, &label);
                     },
                     |ui| {
                         crate::widgets::dropdown(ui, &format!("pref-{path}"), tl!(&label), &mut cur, &pairs, 220.0);
@@ -543,7 +545,7 @@ fn field_rows(ui: &mut egui::Ui, section: &str, obj: &mut Map<String, Value>, ke
                 crate::text::direction::grid_cells(
                     ui,
                     |ui| {
-                        ui.label(RichText::new(tl!(&label)).color(t.text_dim));
+                        field_label(ui, t, &label);
                     },
                     |ui| {
                         ui.horizontal(|ui| {
@@ -563,7 +565,7 @@ fn field_rows(ui: &mut egui::Ui, section: &str, obj: &mut Map<String, Value>, ke
                 crate::text::direction::grid_cells(
                     ui,
                     |ui| {
-                        ui.label(RichText::new(tl!(&label)).color(t.text_dim));
+                        field_label(ui, t, &label);
                     },
                     |ui| {
                         ui.add(egui::TextEdit::singleline(&mut s).desired_width(260.0)).accessible_name(tl!(&label));
@@ -582,7 +584,7 @@ fn field_rows(ui: &mut egui::Ui, section: &str, obj: &mut Map<String, Value>, ke
                 crate::text::direction::grid_cells(
                     ui,
                     |ui| {
-                        label_id = Some(ui.label(RichText::new(tl!(&label)).color(t.text_dim)).id);
+                        label_id = Some(field_label(ui, t, &label).id);
                     },
                     |ui| {
                         if n.is_u64() || n.is_i64() {
@@ -623,7 +625,7 @@ fn field_rows(ui: &mut egui::Ui, section: &str, obj: &mut Map<String, Value>, ke
                 crate::text::direction::grid_cells(
                     ui,
                     |ui| {
-                        ui.label(RichText::new(tl!(&label)).color(t.text_dim));
+                        field_label(ui, t, &label);
                     },
                     |ui| {
                         if let Some(next) = crate::pressure_curve_ui::editor(ui, &v) {
@@ -637,7 +639,7 @@ fn field_rows(ui: &mut egui::Ui, section: &str, obj: &mut Map<String, Value>, ke
                 crate::text::direction::grid_cells(
                     ui,
                     |ui| {
-                        ui.label(RichText::new(tl!("Scratch disks")).color(t.text_dim));
+                        field_label(ui, t, "Scratch disks");
                     },
                     |ui| {
                         ui.vertical(|ui| {
@@ -664,7 +666,7 @@ fn field_rows(ui: &mut egui::Ui, section: &str, obj: &mut Map<String, Value>, ke
                 crate::text::direction::grid_cells(
                     ui,
                     |ui| {
-                        ui.label(RichText::new(tl!(&label)).color(t.text_dim));
+                        field_label(ui, t, &label);
                     },
                     |ui| {
                         ui.label(RichText::new(count).color(t.text_faint));
