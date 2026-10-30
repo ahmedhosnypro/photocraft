@@ -197,10 +197,15 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
     let (mut ok, mut cancel) = (false, false);
     let (mut quality, mut format) = (p.quality, p.format);
     let modal = egui::Modal::new(egui::Id::unique("jpeg-options")).show(ctx, |ui| {
-        ui.set_max_width(360.0);
+        // The width cap hugs the modal's reading-start edge, so in RTL the mirrored body stays
+        // inside the dialog box rather than at the cap's far edge.
+        let area = ui.max_rect();
+        let w = 360.0_f32.min(area.width());
+        let x0 = if crate::direction::is_rtl() { area.right() - w } else { area.left() };
+        let col = egui::Rect::from_min_size(egui::pos2(x0, area.top()), egui::vec2(w, area.height()));
         // One direction-aware body: in LTR `body_layout()` is the Modal's own layout, so nothing
         // moves; in RTL the blocks right-align and every nested row mirrors.
-        ui.scope_builder(egui::UiBuilder::new().max_rect(ui.max_rect()).layout(crate::direction::body_layout()), |ui| {
+        ui.scope_builder(egui::UiBuilder::new().max_rect(col).layout(crate::direction::body_layout()), |ui| {
             ui.label(egui::RichText::new(tl!("JPEG Options")).font(crate::theme::semibold(15.0)));
             ui.add_space(4.0);
             crate::widgets::hairline(ui);
@@ -401,10 +406,10 @@ mod tests {
                 .build_ui_state(|ui, app| show(app, ui.ctx()), app);
             h.run_steps(3);
             let modal = h.ctx.memory(|m| m.area_rect(egui::Id::unique("jpeg-options"))).expect("the modal");
-            (h.get_by_label("OK").rect(), h.get_by_label("Cancel").rect(), modal)
+            (h.get_by_label("OK").rect(), h.get_by_label("Cancel").rect(), modal, h.get_by_label("JPEG Options").rect())
         };
-        let (ok_l, cancel_l, modal_l) = buttons(crate::direction::Dir::Ltr);
-        let (ok_r, cancel_r, modal_r) = buttons(crate::direction::Dir::Rtl);
+        let (ok_l, cancel_l, modal_l, title_l) = buttons(crate::direction::Dir::Ltr);
+        let (ok_r, cancel_r, modal_r, title_r) = buttons(crate::direction::Dir::Rtl);
         assert!(ok_l.left() > cancel_l.left(), "LTR: OK at the reading end");
         assert!(ok_r.left() < cancel_r.left(), "RTL: the button order mirrors");
         // The group hugs the reading end of the dialog: the right in LTR, the left in RTL.
@@ -412,5 +417,9 @@ mod tests {
         assert!(ok_r.left() - modal_r.left() < 40.0, "RTL: the group hugs the left: {ok_r:?} in {modal_r:?}");
         // The dialog is the same width in both directions.
         assert!((modal_l.width() - modal_r.width()).abs() < 1.0, "the same width in both directions");
+        // The body stays inside the modal's own box in both directions.
+        for (title, modal) in [(title_l, modal_l), (title_r, modal_r)] {
+            assert!(title.left() >= modal.left() - 1.0 && title.right() <= modal.right() + 1.0, "the title stays inside the modal box: {title:?} in {modal:?}");
+        }
     }
 }
