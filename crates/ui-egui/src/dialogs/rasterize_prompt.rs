@@ -191,9 +191,8 @@ pub fn body(ui: &mut egui::Ui, f: &Map<String, Value>) {
     let t = crate::theme::Tokens::get(ui.ctx());
     let text = f.get("message").and_then(Value::as_str).unwrap_or("This layer must be rasterized before proceeding.");
     // The caution mark leads the row — left in LTR, right in RTL. The dialog body stays
-    // `top_down(Align::Min)`, so the row's direction must be explicit (LTR: today's layout).
-    let size = ui.available_size_before_wrap();
-    ui.allocate_ui_with_layout(size, crate::text::direction::row().with_cross_align(egui::Align::Min), |ui| {
+    // `top_down(Align::Min)`, so the row opts into `dialog_row` (LTR: today's layout).
+    crate::text::direction::dialog_row(ui, |ui| {
         ui.spacing_mut().item_spacing.x = 12.0;
         let (r, _) = ui.allocate_exact_size(egui::vec2(32.0, 32.0), egui::Sense::hover());
         crate::icons::paint(ui, r, "triangle-alert", 30.0, t.warning);
@@ -260,24 +259,23 @@ mod rtl_tests {
     /// The caution mark leads the row: on the left in LTR, on the right in RTL.
     #[test]
     fn the_caution_mark_leads_the_row_in_reading_order() {
+        use egui_kittest::kittest::Queryable;
         for (dir, rtl) in [(Dir::Ltr, false), (Dir::Rtl, true)] {
             let _scope = direction_scope(dir);
-            let row = std::cell::Cell::new(None);
             let frame = std::cell::Cell::new(None);
             let mut h = egui_kittest::Harness::new_ui(|ui| {
                 frame.set(Some(ui.max_rect()));
                 let mut f = serde_json::Map::new();
                 f.insert("message".into(), json!("Rasterize the type?"));
                 body(ui, &f);
-                row.set(Some(ui.min_rect()));
             });
             crate::PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
             h.run();
-            let (row, frame) = (row.get().unwrap(), frame.get().unwrap());
-            let lead = if rtl { frame.right() - row.right() } else { row.left() - frame.left() };
-            let trail = if rtl { row.left() - frame.left() } else { frame.right() - row.right() };
-            assert!(lead.abs() < 1.0, "{dir:?}: the mark hugs the reading start: {row:?} in {frame:?}");
-            assert!(trail > 40.0, "{dir:?}: the question sits after the mark: {row:?} in {frame:?}");
+            let frame = frame.get().unwrap();
+            // kittest 0.5's get_by_label takes &str, so borrow the translated string
+            let label = h.get_by_label(&tl!("Rasterize the type?")).rect();
+            let gap = if rtl { frame.right() - label.right() } else { label.left() - frame.left() };
+            assert!(gap > 32.0, "{dir:?}: the 32 px caution mark leads the question: {label:?} in {frame:?}");
         }
     }
 }
