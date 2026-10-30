@@ -13,6 +13,10 @@ fn channel_options(dir: crate::text::direction::Dir) -> egui_kittest::Harness<'s
     app.run("file.new", json!({"width": 16, "height": 16})).unwrap();
     let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1280.0, 800.0)).build_ui_state(|ui, app| crate::dialogs::show(app, ui.ctx()), app);
     PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+    // The app flips egui's own direction flag with the language (`i18n::sync_context`); this
+    // harness draws the dialog without the app's frame, so it sets the flag itself. egui's
+    // `Ui::indent` indents from the right only under that flag.
+    crate::theme::set_direction(&h.ctx, dir == crate::text::direction::Dir::Rtl);
     open(h.state_mut(), &json!(0)).unwrap();
     h.run_steps(4);
     h
