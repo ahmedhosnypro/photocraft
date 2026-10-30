@@ -480,7 +480,9 @@ fn shortcuts_rows_read_rtl() {
     for (dir, ltr) in [(crate::direction::Dir::Ltr, true), (crate::direction::Dir::Rtl, false)] {
         let (h, _) = dialog_in_direction(dir);
         let label = h.get_by_label("Search").rect();
-        let edit = h.get_by_role(egui::accesskit::Role::TextInput).rect();
+        // The app behind the dialog has other text inputs (a "Color" field); the search box
+        // carries the filter's value.
+        let edit = h.get_by(|n| n.role() == egui::accesskit::Role::TextInput && n.value().as_deref() == Some("search…")).rect();
         assert_eq!(label.min.x < edit.min.x, ltr, "{dir:?}: search label before its field");
         let add = h.get_by_role_and_label(egui::accesskit::Role::Button, "Add Shortcut").rect();
         let reset = h.get_by_role_and_label(egui::accesskit::Role::Button, "Reset All to Defaults").rect();
