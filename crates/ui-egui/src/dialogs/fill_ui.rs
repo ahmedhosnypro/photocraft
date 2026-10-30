@@ -143,11 +143,13 @@ fn caption_anchor(r: egui::Rect, rtl: bool) -> (egui::Pos2, Align2) {
     }
 }
 
-fn label(ui: &mut egui::Ui, text: &str) {
+/// Paints the caption; returns its box so tests can assert where it landed.
+fn label(ui: &mut egui::Ui, text: &str) -> egui::Rect {
     let t = Tokens::get(ui.ctx());
     let (r, _) = ui.allocate_exact_size(vec2(112.0, 22.0), Sense::hover());
     let (pos, align) = caption_anchor(r, crate::text::direction::is_rtl());
     ui.painter().text(pos, align, text, egui::FontId::proportional(12.0), t.text_dim);
+    r
 }
 
 fn get_str(f: &Map<String, Value>, k: &str, d: &str) -> String {

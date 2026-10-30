@@ -68,3 +68,32 @@ fn rtl_the_caption_hugs_its_field() {
     assert!(matches!(rtl_align, Align2::LEFT_CENTER), "the caption is left-aligned: {rtl_align:?}");
     assert!((rtl_pos.x - (r.left() + 6.0)).abs() < 0.01, "the caption sits at the left of its box: {rtl_pos:?}");
 }
+
+/// Rendered twin: in a real `body_layout` row the `label` box sits at the reading start, flush
+/// against the field it names — left of the field left-to-right, right of it right-to-left.
+#[test]
+fn rtl_the_rendered_caption_box_hugs_the_field() {
+    let area = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(WINDOW, 800.0));
+    let row = |dir: crate::text::direction::Dir| {
+        let _dir = crate::text::direction::direction_scope(dir);
+        let ctx = egui::Context::default();
+        let mut rects = (egui::Rect::NOTHING, egui::Rect::NOTHING);
+        let mut out = ctx.run_ui(egui::RawInput { screen_rect: Some(area), ..Default::default() }, |ui| {
+            ui.with_layout(crate::text::direction::body_layout(), |ui| {
+                ui.horizontal(|ui| {
+                    let cap = label(ui, "Contents:");
+                    let (field, _) = ui.allocate_exact_size(egui::vec2(170.0, 22.0), egui::Sense::hover());
+                    rects = (cap, field);
+                });
+            });
+        });
+        out.textures_delta.clear();
+        rects
+    };
+    let (ltr_cap, ltr_field) = row(crate::text::direction::Dir::Ltr);
+    let (rtl_cap, rtl_field) = row(crate::text::direction::Dir::Rtl);
+    assert!(ltr_cap.center().x < ltr_field.center().x, "LTR: the caption leads: {ltr_cap:?} / {ltr_field:?}");
+    assert!((ltr_field.left() - ltr_cap.right()).abs() <= 16.0, "LTR: the caption box is flush with the field: {ltr_cap:?} / {ltr_field:?}");
+    assert!(rtl_cap.center().x > rtl_field.center().x, "RTL: the caption leads from the right: {rtl_cap:?} / {rtl_field:?}");
+    assert!((rtl_cap.left() - rtl_field.right()).abs() <= 16.0, "RTL: the caption box is flush with the field: {rtl_cap:?} / {rtl_field:?}");
+}
