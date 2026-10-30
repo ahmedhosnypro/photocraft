@@ -1,6 +1,6 @@
 # Localization parity
 
-> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-28 · **Change:** minor (Arabic UI catalog; previously minor: Arabic paragraph direction buttons, #6793) · **Target:** Adobe Photoshop 2026
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-30 · **Change:** minor (Arabic RTL layout complete: shell, dialogs, menus, panels, tabs; previously minor: Arabic UI catalog) · **Target:** Adobe Photoshop 2026
 
 Per-language status of PhotoCraft's UI. How catalogs work and how to add one:
 [`localization.md`](localization.md). Language notes: [Korean](localization-ko.md), [Spanish](localization-es.md),
@@ -36,7 +36,10 @@ speakers, ~55% ready. Remaining: 80–140 h, plus native-speaker review (recorde
 | Simplified Chinese | `zh-hans` | 1,608 / 1,608 (100%) | 2,366 | dialogs, tooltips yes; engine messages English | CJK fonts (lazy loader), IME preedit/commit, vertical type | no | partial | 8–12 h |
 | Spanish | `es` | 1,844 / 1,844 (100%) | 4,010 | as above; complete dynamic UI key set | Latin | no | partial | 6–10 h |
 | Hindi | `hi` | partial | 448 | Top menus, toolbox tools, camera raw, dialogs, plurals | Devanagari shaping in the text engine (parley/HarfRust); no Devanagari fallback font (TYPE-218-3) | no | partial | 15–20 h |
-| Arabic | `ar` | 2,175 / 2,175 (100%, 2026-10-28) | 3,410 | as above; combined from the community catalogs with one term per concept | Arabic shaping and bidi in the UI (egui 0.37) and the text engine, Arabic fallback font; RTL shell layout but not inside panels (DIST-220-4), paragraph direction buttons but no visual RTL caret (TYPE-218-2 partial) | no | partial | 15–25 h |
+| Arabic | `ar` | 2,175 / 2,175 (100%, 2026-10-28) | 3,410 | as above; combined from the community catalogs with one term per concept | Arabic shaping and bidi in the UI (egui 0.37) and the text engine, Arabic fallback font; full
+RTL shell layout (DIST-220-4 done): shell chrome, dialogs, menus and rows, panel interiors,
+document tabs; canvas stays LTR; paragraph direction buttons but no visual RTL caret
+(TYPE-218-2 partial) | no | partial | 15–25 h |
 | French | `fr` | 1,608 / 1,608 (100%) | 2,766 | as above | Latin | no | partial | 6–10 h |
 | Portuguese (Brazil) | `pt-br` | 1,608 / 1,608 (100%) | 2,788 | as above | Latin; every `pt` locale uses it | no | partial | 6–10 h |
 | Indonesian | `id` | 1,608 / 1,608 (100%) | 2,764 | as above | Latin | no | partial | 6–10 h |
@@ -68,9 +71,10 @@ engine localization or native review is complete.
 ## Cross-language gaps
 
 - Engine error, status and parameter-help messages are English in every language.
-- Right-to-left UI layout is partial (2026-10-10): the shell mirrors for Arabic, Hebrew, Persian,
-  Urdu and other right-to-left codes (`direction.rs`), but panel interiors, dialogs, menu rows,
-  submenus and document tabs stay left to right. Word order within a label is right: egui 0.37
+- Right-to-left UI layout (2026-10-10 shell, 2026-10-30 full): the shell mirrors for Arabic,
+  Hebrew, Persian, Urdu and other right-to-left codes (`text/direction.rs` + egui
+  `Style::right_to_left`); dialogs, menus and rows, panel interiors, document tabs and floating
+  windows mirror too; the canvas stays left to right. Word order within a label is right: egui 0.37
   lays text out with the Unicode Bidirectional Algorithm.
 - Web build: no browser-locale detection. It has no system fonts: Arabic, CJK and other non-Latin interface labels are drawn with the host's served script fonts (`packaging/web/README.md` › Fonts), and show as boxes on a host that serves none.
 - WebAssembly plug-ins disappear from Filter › Plug-ins when the UI isn't English (#2540).
@@ -93,3 +97,4 @@ engine localization or native review is complete.
 | 2026-10-18 | minor | Russian: 1,229 dynamic labels added (filter and adjustment parameters, Camera Raw, lighting, History/Layers/paths menus, metadata, System Info, status templates, dialogs) with a terminology note ([localization-ru](localization-ru.md)) |
 | 2026-10-22 | minor | Arabic row: paragraph direction has Auto / Left-to-right / Right-to-left buttons in the Paragraph panel and Type options bar (#6793); the visual RTL caret is still missing (TYPE-218-2 partial) |
 | 2026-10-28 | minor | Arabic (`ar`) UI catalog: every measured key, six plural forms; layer names and the title bar no longer reversed on egui 0.37 |
+| 2026-10-30 | minor | Arabic RTL layout complete: dialogs, menu rows (shortcuts at the row's far end, no permanent access-key suffix), panel interiors, document tabs; DIST-220-4 done |
