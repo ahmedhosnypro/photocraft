@@ -456,22 +456,21 @@ mod tests {
         assert_row_mirrors(color_balance, (egui::accesskit::Role::RadioButton, "Shadows"), (egui::accesskit::Role::RadioButton, "Highlights"));
     }
 
-    /// Whether the "medium" font family has any face in this environment: the Black & White
-    /// Tint row's Default button draws in it, and a test font set may leave the family faceless
-    /// (the same guard as adjust_editors/ui_tests.rs).
-    fn medium_family_has_faces() -> bool {
+    /// Whether the "medium" font family can draw in this environment: the Black & White Tint
+    /// row's Default button renders in it, and a test font set may leave the family without a
+    /// usable face (the same guard idea as adjust_editors/ui_tests.rs).
+    fn medium_family_renders() -> bool {
         let ctx = egui::Context::default();
         crate::PhotocraftApp::setup_context(&ctx, Default::default());
-        ctx.fonts(|f| {
-            let defs = f.definitions();
-            defs.families.get(&egui::FontFamily::Name("medium".into())).is_some_and(|stack| stack.iter().any(|name| defs.font_data.contains_key(name)))
-        })
+        let mut out = ctx.run(egui::RawInput::default(), |_| {});
+        out.textures_delta.clear();
+        ctx.fonts_mut(|f| f.has_glyph(&crate::theme::medium(12.0), 'D'))
     }
 
     /// The Black & White Tint row: the Tint checkbox first, the Default button last.
     #[test]
     fn black_white_tint_row_mirrors_under_rtl() {
-        if !medium_family_has_faces() {
+        if !medium_family_renders() {
             return;
         }
         assert_row_mirrors(black_white, (egui::accesskit::Role::CheckBox, "Tint"), (egui::accesskit::Role::Button, "Default"));
