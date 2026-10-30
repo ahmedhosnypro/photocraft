@@ -22,10 +22,9 @@ pub(crate) fn row_value(x: f32, min: f32, max: f32, decimals: Option<u32>) -> f3
 }
 
 pub(super) fn sliders(ui: &mut egui::Ui, v: &mut Value, rows: &[SliderRow]) -> Edit {
-    // The body scope mirrors the rows in a right-to-left UI (the caption at the reading start,
-    // the number at the reading end). The plain adjustment kinds call this directly, so the
-    // scope lives here and not only in the editors.
-    ui.with_layout(crate::direction::body_layout(), |ui| slider_rows(ui, v, rows)).inner
+    // Drawn inside the caller's mirrored body scope: the editors below wrap themselves, and the
+    // plain kinds (Exposure/Vibrance/Posterize) are hosted by the dialog/Properties body scopes.
+    slider_rows(ui, v, rows)
 }
 
 /// The rows themselves, drawn inside the mirrored body scope.
@@ -351,6 +350,52 @@ mod tests {
         (caption, field)
     }
 
+    /// An adjustment editor with hand-built rows, drawn in `dir`; the editor's own body scope
+    /// mirrors them.
+    fn editor_harness(dir: Dir, editor: fn(&mut egui::Ui, &mut Value, &EditorCx) -> Edit) -> Harness<'static, Value> {
+        let _dir = direction_scope(dir);
+        let mut h = Harness::builder().with_size(egui::vec2(420.0, 300.0)).build_ui_state(
+            move |ui, v: &mut Value| {
+                let cx = EditorCx {
+                    mem: egui::Id::unique("editor"),
+                    hist: None,
+                    gray: false,
+                    swatches: [[0.0; 3]; 2],
+                    gradients: Vec::new(),
+                    dialog: true,
+                    dynamic_color_sliders: true,
+                    isolated_curve: None,
+                };
+                editor(ui, v, &cx);
+            },
+            json!({}),
+        );
+        crate::PhotocraftApp::setup_context(&h.ctx, Default::default());
+        h.run_steps(4);
+        h
+    }
+
+    /// The rect of the widget of `role` named `label`.
+    fn rect_of(h: &Harness<'_, Value>, role: egui::accesskit::Role, label: &str) -> egui::Rect {
+        h.get_by_role_and_label(role, label).rect()
+    }
+
+    /// The editor's only dropdown.
+    fn combo_rect(h: &Harness<'_, Value>) -> egui::Rect {
+        h.query_all(by().role(egui::accesskit::Role::ComboBox)).next().expect("the dropdown").rect()
+    }
+
+    /// A hand-built row mirrors in a right-to-left UI: its first-added atom moves to the
+    /// reading start, its last-added one to the reading end.
+    fn assert_row_mirrors(editor: fn(&mut egui::Ui, &mut Value, &EditorCx) -> Edit, first: (egui::accesskit::Role, &str), last: (egui::accesskit::Role, &str)) {
+        let ltr = editor_harness(Dir::Ltr, editor);
+        let rtl = editor_harness(Dir::Rtl, editor);
+        let (fl, ll) = (rect_of(&ltr, first.0, first.1), rect_of(&ltr, last.0, last.1));
+        assert!(fl.left() < ll.left(), "LTR reads left to right: {fl:?} {ll:?}");
+        let (fr, lr) = (rect_of(&rtl, first.0, first.1), rect_of(&rtl, last.0, last.1));
+        assert!(fr.left() > lr.left(), "RTL reads right to left: {fr:?} {lr:?}");
+    }
+
     /// The row mirrors in a right-to-left UI: the caption moves to the reading start and the
     /// number to the reading end.
     #[test]
@@ -378,9 +423,10 @@ mod tests {
             dynamic_color_sliders: true,
             isolated_curve: None,
         };
-        let out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
             threshold(ui, &mut v, &cx);
         });
+        out.textures_delta.clear();
         let mut hist = None;
         let mut marker = None;
         for clipped in &out.shapes {
@@ -402,5 +448,41 @@ mod tests {
             let fraction = (marker - hist.left()) / hist.width();
             assert!((fraction - 64.0 / 255.0).abs() < 0.01, "{dir:?}: the marker sits at the level: {hist:?} {marker}");
         }
+    }
+
+    /// The Color Balance Tone radio row: Shadows first, Highlights last.
+    #[test]
+    fn color_balance_tone_row_mirrors_under_rtl() {
+        assert_row_mirrors(color_balance, (egui::accesskit::Role::RadioButton, "Shadows"), (egui::accesskit::Role::RadioButton, "Highlights"));
+    }
+
+    /// The Black & White Tint row: the Tint checkbox first, the Default button last.
+    #[test]
+    fn black_white_tint_row_mirrors_under_rtl() {
+        assert_row_mirrors(black_white, (egui::accesskit::Role::CheckBox, "Tint"), (egui::accesskit::Role::Button, "Default"));
+    }
+
+    /// The Photo Filter row: the "Filter:" radio first, the dropdown last.
+    #[test]
+    fn photo_filter_row_mirrors_under_rtl() {
+        let ltr = editor_harness(Dir::Ltr, photo_filter);
+        let rtl = editor_harness(Dir::Rtl, photo_filter);
+        let radio = egui::accesskit::Role::RadioButton;
+        let (fl, cl) = (rect_of(&ltr, radio, "Filter:"), combo_rect(&ltr));
+        assert!(fl.left() < cl.left(), "LTR reads left to right: {fl:?} {cl:?}");
+        let (fr, cr) = (rect_of(&rtl, radio, "Filter:"), combo_rect(&rtl));
+        assert!(fr.left() > cr.left(), "RTL reads right to left: {fr:?} {cr:?}");
+    }
+
+    /// The Channel Mixer Output Channel row: the caption first, the dropdown last.
+    #[test]
+    fn channel_mixer_output_row_mirrors_under_rtl() {
+        let ltr = editor_harness(Dir::Ltr, channel_mixer);
+        let rtl = editor_harness(Dir::Rtl, channel_mixer);
+        let caption = egui::accesskit::Role::Label;
+        let (fl, cl) = (rect_of(&ltr, caption, "Output Channel:"), combo_rect(&ltr));
+        assert!(fl.left() < cl.left(), "LTR reads left to right: {fl:?} {cl:?}");
+        let (fr, cr) = (rect_of(&rtl, caption, "Output Channel:"), combo_rect(&rtl));
+        assert!(fr.left() > cr.left(), "RTL reads right to left: {fr:?} {cr:?}");
     }
 }
