@@ -1384,7 +1384,7 @@ mod rtl_tests {
 
     #[test]
     fn a_param_row_reads_caption_then_value_and_mirrors_in_rtl() {
-        use egui_kittest::kittest::{By, Queryable};
+        use egui_kittest::kittest::Queryable;
         for (dir, caption_first) in
             [(crate::text::direction::Dir::Ltr, true), (crate::text::direction::Dir::Rtl, false)]
         {
@@ -1399,8 +1399,7 @@ mod rtl_tests {
             h.run_steps(4);
             // Gaussian Blur's Radius is a log-slider row: caption, then its value field at the
             // reading end (`trailing()`).
-            let caption = h
-                .get_by(By::new().label("Radius").include_labels().predicate(|n| n.role() == egui::accesskit::Role::Label));
+            let caption = h.get_by(|n| n.role() == egui::accesskit::Role::Label && n.value().as_deref() == Some("Radius"));
             let field = h.get_by_role_and_label(egui::accesskit::Role::SpinButton, "Radius");
             assert_eq!(caption.rect().right() < field.rect().left(), caption_first, "{dir:?}");
         }
