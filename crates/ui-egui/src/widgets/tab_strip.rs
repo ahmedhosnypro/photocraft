@@ -72,6 +72,7 @@ fn tabs_in(
     font: egui::FontId,
     pad: f32,
     min_w: f32,
+    rtl: bool,
     active: impl Fn(usize) -> bool,
     mut paint_tab: impl FnMut(&Ui, Rect, usize, &str, std::sync::Arc<egui::Galley>, &Response, bool),
 ) -> Option<TabContextAction> {
@@ -81,12 +82,19 @@ fn tabs_in(
     let translated_tabs = names.as_slice();
     let natural: Vec<f32> = translated_tabs.iter().map(|n| ui.painter().layout_no_wrap((*n).to_owned(), font.clone(), t.text).size().x + pad).collect();
     let f = fit(&natural, *selected, area.width(), min_w, CHEVRON_W);
-    let mut x = area.left();
+    // A right-to-left strip reads from the right edge; the overflow chevron keeps its slot at
+    // the reading end (the left), which `fit` has already reserved in the tab budget.
+    let chev = (!f.overflow.is_empty() && f.overflow_width > 0.0).then_some(f.overflow_width);
+    let mut x = if rtl { area.right() } else { area.left() };
     let mut context = None;
     for &(i, w) in &f.shown {
         let Some(name) = translated_tabs.get(i) else { continue };
         let panel_id = panel_ids[i];
-        let r = Rect::from_min_size(pos2(x, area.top()), vec2(w, area.height()));
+        let r = if rtl {
+            Rect::from_min_max(pos2(x - w, area.top()), pos2(x, area.bottom()))
+        } else {
+            Rect::from_min_size(pos2(x, area.top()), vec2(w, area.height()))
+        };
         // The padding gives way (down to a third) before the label is cut.
         let galley = elided(ui, name, font.clone(), t.text, (w - pad / 3.0).max(1.0));
         let cut = galley.size().x + pad + 0.5 < natural.get(i).copied().unwrap_or(0.0) && galley.size().x + pad / 3.0 >= w - 0.5;
@@ -111,10 +119,14 @@ fn tabs_in(
                 ui.close();
             }
         });
-        x = r.right();
+        x = if rtl { r.left() } else { r.right() };
     }
-    if !f.overflow.is_empty() && f.overflow_width > 0.0 {
-        let r = Rect::from_min_size(pos2(x, area.top()), vec2(f.overflow_width, area.height()));
+    if let Some(cw) = chev {
+        let r = if rtl {
+            Rect::from_min_max(pos2(area.left(), area.top()), pos2((area.left() + cw).min(x), area.bottom()))
+        } else {
+            Rect::from_min_size(pos2(x, area.top()), vec2(cw, area.height()))
+        };
         let mut picked = None;
         overflow_button(ui, id.with("tab-overflow"), r, tl!("More panels"), translated_tabs, &f.overflow, None, &mut picked);
         if let Some(i) = picked {
@@ -129,6 +141,7 @@ fn tabs_in(
 pub fn pill_tabs(ui: &mut Ui, id: egui::Id, area: Rect, tabs: &[&str], selected: &mut usize) -> Option<TabContextAction> {
     let t = Tokens::get(ui.ctx());
     let sel = *selected;
+    let rtl = crate::direction::is_rtl();
     tabs_in(
         ui,
         id,
@@ -138,10 +151,16 @@ pub fn pill_tabs(ui: &mut Ui, id: egui::Id, area: Rect, tabs: &[&str], selected:
         theme::medium(12.5),
         20.0,
         44.0,
+        rtl,
         |i| i == sel,
         |ui, r, _, _, galley, resp, active| {
-            // 2 pt between pills, as the old horizontal layout had.
-            let r = Rect::from_min_max(r.min, pos2((r.right() - 2.0).max(r.left()), r.bottom()));
+            // 2 pt between pills, as the old horizontal layout had; mirrored, the gap falls on
+            // the other side of the pill.
+            let r = if rtl {
+                Rect::from_min_max(pos2((r.left() + 2.0).min(r.right()), r.top()), pos2(r.right(), r.bottom()))
+            } else {
+                Rect::from_min_max(r.min, pos2((r.right() - 2.0).max(r.left()), r.bottom()))
+            };
             if active {
                 crate::widgets::surface(ui, r, t.hover, true);
                 if !t.bevel {
@@ -238,5 +257,69 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Draw `tabs` with the private strip painter in `dir`: each tab's rect and the overflow
+    /// chevron's rect.
+    fn strip_rects(dir: crate::direction::Dir, area: Rect, tabs: &[&str]) -> (Vec<(usize, Rect)>, Option<Rect>) {
+        let ctx = egui::Context::default();
+        crate::PhotocraftApp::setup_context(&ctx, crate::theme::ThemeKind::Pro);
+        let _scope = crate::direction::direction_scope(dir);
+        let mut rects = Vec::new();
+        for _ in 0..2 {
+            rects.clear();
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                let mut sel = 0usize;
+                tabs_in(
+                    ui,
+                    egui::Id::unique("strip"),
+                    area,
+                    tabs,
+                    &mut sel,
+                    egui::FontId::proportional(12.0),
+                    20.0,
+                    44.0,
+                    dir == crate::direction::Dir::Rtl,
+                    |i| i == 0,
+                    |_ui, r, i, _name, _galley, _resp, _active| rects.push((i, r)),
+                );
+            });
+            output.textures_delta.clear();
+        }
+        let chevron = ctx.read_response(egui::Id::unique("strip").with("tab-overflow")).map(|r| r.rect);
+        (rects, chevron)
+    }
+
+    #[test]
+    fn an_rtl_strip_lays_tabs_from_the_trailing_edge() {
+        let area = Rect::from_min_size(pos2(100.0, 50.0), vec2(300.0, 24.0));
+        let tabs = &["Alpha", "Beta", "Gamma"];
+        let (ltr, ltr_chevron) = strip_rects(crate::direction::Dir::Ltr, area, tabs);
+        let (rtl, rtl_chevron) = strip_rects(crate::direction::Dir::Rtl, area, tabs);
+        assert!(!ltr.is_empty() && !rtl.is_empty(), "the strip draws its tabs");
+        assert_eq!(ltr[0].0, 0);
+        assert!((ltr[0].1.left() - area.left()).abs() < 0.5, "LTR keeps tabs at the left: {ltr:?}");
+        assert!(ltr[0].1.left() < ltr[1].1.left());
+        assert!((rtl[0].1.right() - area.right()).abs() < 0.5, "the first tab hugs the right edge: {rtl:?}");
+        assert!(rtl[0].1.left() > rtl[1].1.left(), "reading order reverses on screen: {rtl:?}");
+        assert!(ltr_chevron.is_none() && rtl_chevron.is_none(), "everything fits, so there is no chevron");
+    }
+
+    #[test]
+    fn an_rtl_strip_reserves_the_overflow_chevron_at_the_reading_end() {
+        let area = Rect::from_min_size(pos2(100.0, 50.0), vec2(120.0, 24.0));
+        let tabs = &["AlphaLong", "BetaEven", "GammaTab"];
+        let (rtl, chevron) = strip_rects(crate::direction::Dir::Rtl, area, tabs);
+        assert!(!rtl.is_empty() && rtl.len() < tabs.len(), "the strip overflows: {rtl:?}");
+        let chevron = chevron.expect("the overflow chevron");
+        assert!((chevron.left() - area.left()).abs() < 0.5, "the chevron sits at the reading end: {chevron:?}");
+        assert!((chevron.width() - CHEVRON_W).abs() < 0.5, "the chevron keeps its slot: {chevron:?}");
+        let min_left = rtl.iter().map(|(_, r)| r.left()).fold(f32::INFINITY, f32::min);
+        assert!(min_left >= chevron.right() - 0.5, "no tab runs under the chevron: {rtl:?}");
+        let (ltr, ltr_chevron) = strip_rects(crate::direction::Dir::Ltr, area, tabs);
+        let ltr_chevron = ltr_chevron.expect("the overflow chevron");
+        assert!(ltr_chevron.right() <= area.right() + 0.5, "LTR keeps the chevron at the right end: {ltr_chevron:?}");
+        let max_right = ltr.iter().map(|(_, r)| r.right()).fold(f32::NEG_INFINITY, f32::max);
+        assert!(max_right <= ltr_chevron.left() + 0.5, "no tab runs under the chevron: {ltr:?}");
     }
 }
