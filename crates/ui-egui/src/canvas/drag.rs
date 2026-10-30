@@ -314,8 +314,9 @@ pub(crate) fn draw_value_readout<const N: usize>(app: &PhotocraftApp, ctx: &egui
 
 /// A readout of `N` rows beside the pointer (labels left, values right-aligned), above everything.
 ///
-/// The readout is canvas-anchored measurement geometry: it stays left-to-right whatever the UI
-/// direction, so its labels and numbers sit where a left-to-right UI puts them.
+/// The readout is canvas-anchored measurement geometry: its area's `top_down(Align::Min)`
+/// layout keeps the rows left-to-right whatever the UI direction, so the labels and numbers
+/// sit where a left-to-right UI puts them.
 pub(crate) fn draw_readout<const N: usize>(ctx: &egui::Context, id: &str, cursor: Pos2, labels: [&str; N], values: [String; N]) {
     let _ltr = crate::direction::direction_scope(crate::direction::Dir::Ltr);
     let t = crate::theme::Tokens::get(ctx);
