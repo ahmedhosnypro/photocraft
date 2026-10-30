@@ -65,8 +65,8 @@ pub fn footer_height(ui: &Ui) -> f32 {
 
 /// A panel footer as in Photoshop's Layers and History panels: a bar of buttons under a line that
 /// runs from edge to edge of the panel, the buttons centred in the bar's height and laid out from
-/// the right. Drawn last in a body that fills its group (leave it [`footer_height`]), the bar ends
-/// at the panel's bottom edge.
+/// the reading end (the right edge, or the left in a right-to-left UI). Drawn last in a body that
+/// fills its group (leave it [`footer_height`]), the bar ends at the panel's bottom edge.
 pub fn panel_footer<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
     let t = Tokens::get(ui.ctx());
     let m = body_margin(t.pro);
@@ -74,7 +74,7 @@ pub fn panel_footer<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
     let y = r.top() + 0.5;
     ui.painter().line_segment([pos2(r.left() - m.left as f32, y), pos2(r.right() + m.right as f32, y)], Stroke::new(1.0, t.separator));
     let bar = Rect::from_min_size(pos2(r.left(), r.top() + 1.0), vec2(r.width(), FOOTER_BAR));
-    let mut bar_ui = ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(egui::Layout::right_to_left(egui::Align::Center)));
+    let mut bar_ui = ui.new_child(egui::UiBuilder::new().max_rect(bar).layout(crate::text::direction::trailing()));
     // The bar runs on over the body's bottom margin, past where the body's own clip ends: without
     // this its buttons were cut off there, a 26 px hover highlight drawn about 21 px tall.
     bar_ui.set_clip_rect(bar_ui.clip_rect().union(bar));

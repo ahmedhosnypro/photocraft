@@ -254,10 +254,11 @@ pub(crate) const CLOSE_BOX: bool = !cfg!(target_os = "macos");
 /// The side of the close box's square, in points.
 const CLOSE_BOX_SIZE: f32 = 20.0;
 
-/// The close box's square: flush with the title band's right end `right`, centred on the title
-/// row at height `centre_y`.
-fn close_box_rect(right: f32, centre_y: f32) -> egui::Rect {
-    egui::Rect::from_min_size(egui::pos2(right - CLOSE_BOX_SIZE, centre_y - CLOSE_BOX_SIZE / 2.0), egui::vec2(CLOSE_BOX_SIZE, CLOSE_BOX_SIZE))
+/// The close box's square: flush with the title band's far end — the band's right end in LTR, its
+/// left end in RTL — centred on the title row at height `centre_y`.
+fn close_box_rect(rtl: bool, band_end: f32, centre_y: f32) -> egui::Rect {
+    let x = if rtl { band_end } else { band_end - CLOSE_BOX_SIZE };
+    egui::Rect::from_min_size(egui::pos2(x, centre_y - CLOSE_BOX_SIZE / 2.0), egui::vec2(CLOSE_BOX_SIZE, CLOSE_BOX_SIZE))
 }
 
 /// Draws a title bar's close box in `rect`, the same × icon button the floating panels close with,
@@ -353,13 +354,19 @@ fn dialog_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, d: &Dialog, fields: &
             // tab is a dialog field, so automation can switch it with `ui.dialog.set`.
             let tab = about_tab(fields);
             let mut chosen = tab;
-            ui.horizontal(|ui| {
-                for (key, label) in [("about", tl!("About")), ("contributors", tl!("Contributors")), ("models", tl!("Models"))] {
-                    if crate::widgets::pill_tab(ui, label, tab == key).clicked() {
-                        chosen = key;
+            // The strip reads from the right in a right-to-left UI (`ui.horizontal` mirrors only
+            // under a mirrored parent layout, which this dialog no longer has).
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y),
+                crate::text::direction::row(),
+                |ui| {
+                    for (key, label) in [("about", tl!("About")), ("contributors", tl!("Contributors")), ("models", tl!("Models"))] {
+                        if crate::widgets::pill_tab(ui, label, tab == key).clicked() {
+                            chosen = key;
+                        }
                     }
-                }
-            });
+                },
+            );
             if chosen != tab {
                 fields.insert("tab".into(), json!(chosen));
             }
@@ -405,8 +412,9 @@ fn filter_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, d: &Dialog, fields: &
     }
 }
 
-/// The OK / Cancel row (with Apply, Alternate or Reset where the dialog has them), drawn in the
-/// right-to-left layout. Returns what the buttons (or Enter) answered and whether Apply was hit.
+/// The OK / Cancel row (with Apply, Alternate or Reset where the dialog has them), pinned to the
+/// footer's reading end and mirrored by [`crate::widgets::dialog_buttons`]. Returns what the
+/// buttons (or Enter) answered and whether Apply was hit.
 /// `popup_blocks_enter` is true when a web dialog has a popup open, which keeps Enter for the popup.
 fn button_row(
     app: &mut PhotocraftApp,
@@ -627,15 +635,37 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
             if color_picker {
                 ui.set_width(crate::color_picker_ui::CONTENT_WIDTH);
             }
+            // Title, close box and drag band stay on this Ui (they anchor to the band's ends) and
+            // the blocks mirror individually: a scope over the whole body would register a widget
+            // across it that changes the modal's drag hit-testing and frame sizing.
+            let rtl = crate::text::direction::is_rtl();
             let label = egui::Label::new(egui::RichText::new(&title).font(crate::theme::semibold(15.0))).selectable(false);
-            let t = if crate::color_picker_ui::owns(&fields) { ui.add_sized(egui::vec2(ui.available_width(), 22.0), label).rect } else { ui.add(label).rect };
+            let t = if crate::color_picker_ui::owns(&fields) {
+                ui.add_sized(egui::vec2(ui.available_width(), 22.0), label).rect
+            } else if rtl {
+                // The title reads from the right: the mirrored body layout right-places the label,
+                // and the galley with it (labels align by their layout's horizontal placement).
+                ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 22.0), crate::text::direction::body_layout(), |ui| ui.add(label))
+                    .inner
+                    .rect
+            } else {
+                ui.add(label).rect
+            };
             // The whole title band drags (#1921): the full width plus a little of the popup's
             // padding around it and the gap above the hairline, but none of the controls below.
-            // The close box (#5496) sits at the band's right end and is left out of the drag area:
-            // egui would let a drag that starts on a button move the dialog.
-            let close_rect = CLOSE_BOX.then(|| close_box_rect(ui.max_rect().right(), t.center().y));
-            let bar_right = close_rect.map_or(ui.max_rect().right() + 7.0, |r| r.left());
-            let bar = egui::Rect::from_min_max(t.min - egui::vec2(7.0, 7.0), egui::pos2(bar_right, t.bottom() + 4.0));
+            // The close box (#5496) sits at the band's far end — right in LTR, left in RTL — and
+            // is left out of the drag area: egui would let a drag that starts on a button move the
+            // dialog.
+            let band = ui.max_rect();
+            let (bar, close_rect) = if rtl {
+                let close_rect = CLOSE_BOX.then(|| close_box_rect(rtl, band.left(), t.center().y));
+                let bar_left = close_rect.map_or(band.left() - 7.0, |r| r.right());
+                (egui::Rect::from_min_max(egui::pos2(bar_left, t.min.y - 7.0), egui::pos2(t.max.x + 7.0, t.bottom() + 4.0)), close_rect)
+            } else {
+                let close_rect = CLOSE_BOX.then(|| close_box_rect(rtl, band.right(), t.center().y));
+                let bar_right = close_rect.map_or(band.right() + 7.0, |r| r.left());
+                (egui::Rect::from_min_max(t.min - egui::vec2(7.0, 7.0), egui::pos2(bar_right, t.bottom() + 4.0)), close_rect)
+            };
             drag = ui.interact(bar, id.with("title"), egui::Sense::drag()).drag_delta();
             if let Some(r) = close_rect {
                 close_clicked = close_box(ui, r);
@@ -665,9 +695,11 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 ui.add_space(8.0);
                 // Align::Min, not Center: a centred row fills the height left over from last frame's
                 // (larger) size, so a dialog whose body gets shorter would never shrink back.
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                // The group hugs the row's reading end: the right edge in LTR, the left in RTL.
+                ui.with_layout(crate::text::direction::trailing_min(), |ui| {
                     ui.spacing_mut().item_spacing.x = 10.0;
-                    let (done, apply) = button_row(app, ui, &d, &mut fields, id, interactive, web && (web_popup_open || egui::Popup::is_any_open(ui.ctx())));
+                    let (done, apply) =
+                        button_row(app, ui, &d, &mut fields, id, interactive, web && (web_popup_open || egui::Popup::is_any_open(ui.ctx())));
                     outcome = done.or(outcome);
                     apply_requested |= apply;
                 });
