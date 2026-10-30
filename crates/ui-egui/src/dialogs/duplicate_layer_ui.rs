@@ -45,33 +45,67 @@ pub fn body(app: &PhotocraftApp, ui: &mut egui::Ui, fields: &mut Map<String, Val
         Some(Value::Number(n)) => n.to_string(),
         _ => String::new(),
     };
-    egui::Grid::new("duplicate-layer").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-        if let Some(name) = fields.get("name").and_then(Value::as_str) {
-            let mut name = name.to_string();
-            let name_label = ui.label(tl!("Name:"));
-            ui.add(egui::TextEdit::singleline(&mut name).desired_width(260.0)).labelled_by(name_label.id);
-            fields.insert("name".into(), json!(name));
-            ui.end_row();
+    if crate::text::direction::is_rtl() {
+        // The fork's `egui::Grid` cannot be drawn in a right-to-left body: its cursor only
+        // advances left-to-right, so the placer's available width goes NaN and egui panics.
+        // The same rows are drawn by hand in reading order instead: the label at the reading
+        // start, the field beside it.
+        ui.spacing_mut().item_spacing = egui::vec2(12.0, 6.0);
+        if matches!(fields.get("name"), Some(Value::String(_))) {
+            crate::text::direction::dialog_row(ui, |ui| name_row(ui, fields));
         }
-        ui.label(egui::RichText::new(tl!("Destination")).font(crate::theme::semibold(13.0)));
-        ui.end_row();
-        ui.label(tl!("Document"));
-        crate::widgets::dropdown(ui, "duplicate-layer-document", tl!("Document"), &mut destination, &options, 260.0);
-        ui.end_row();
+        crate::text::direction::dialog_row(ui, |ui| {
+            ui.label(egui::RichText::new(tl!("Destination")).font(crate::theme::semibold(13.0)));
+        });
+        crate::text::direction::dialog_row(ui, |ui| document_row(ui, &mut destination, &options));
         // Photoshop's document-`Name` is only there when the destination is a new document.
         if destination == "new" {
-            let mut doc_name = fields.get("documentName").and_then(Value::as_str).unwrap_or("").to_string();
-            let name_label = ui.label(tl!("Name:"));
-            ui.add(egui::TextEdit::singleline(&mut doc_name).desired_width(260.0)).labelled_by(name_label.id);
-            fields.insert("documentName".into(), json!(doc_name));
-            ui.end_row();
+            crate::text::direction::dialog_row(ui, |ui| document_name_row(ui, fields));
         }
-    });
+    } else {
+        egui::Grid::new("duplicate-layer").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+            if matches!(fields.get("name"), Some(Value::String(_))) {
+                name_row(ui, fields);
+                ui.end_row();
+            }
+            ui.label(egui::RichText::new(tl!("Destination")).font(crate::theme::semibold(13.0)));
+            ui.end_row();
+            document_row(ui, &mut destination, &options);
+            ui.end_row();
+            // Photoshop's document-`Name` is only there when the destination is a new document.
+            if destination == "new" {
+                document_name_row(ui, fields);
+                ui.end_row();
+            }
+        });
+    }
     if destination == "new" {
         fields.insert("destination".into(), json!("new"));
     } else if let Ok(i) = destination.parse::<u64>() {
         fields.insert("destination".into(), json!(i));
     }
+}
+
+/// The copy's name: the label names the field for accessibility.
+fn name_row(ui: &mut egui::Ui, fields: &mut Map<String, Value>) {
+    let mut name = fields.get("name").and_then(Value::as_str).unwrap_or_default().to_string();
+    let name_label = ui.label(tl!("Name:"));
+    ui.add(egui::TextEdit::singleline(&mut name).desired_width(260.0)).labelled_by(name_label.id);
+    fields.insert("name".into(), json!(name));
+}
+
+/// The Document row: the destination document, or "New" for a fresh one.
+fn document_row(ui: &mut egui::Ui, destination: &mut String, options: &[(String, &str)]) {
+    ui.label(tl!("Document"));
+    crate::widgets::dropdown(ui, "duplicate-layer-document", tl!("Document"), destination, options, 260.0);
+}
+
+/// The new document's name, shown only when the destination is a new document.
+fn document_name_row(ui: &mut egui::Ui, fields: &mut Map<String, Value>) {
+    let mut doc_name = fields.get("documentName").and_then(Value::as_str).unwrap_or("").to_string();
+    let name_label = ui.label(tl!("Name:"));
+    ui.add(egui::TextEdit::singleline(&mut doc_name).desired_width(260.0)).labelled_by(name_label.id);
+    fields.insert("documentName".into(), json!(doc_name));
 }
 
 pub fn confirm(app: &mut PhotocraftApp, fields: &Map<String, Value>) -> Result<Value, String> {
@@ -196,5 +230,65 @@ mod tests {
         app.run("layer.new.layerViaCopy", json!({})).unwrap();
         assert!(app.ui.dialogs.is_empty());
         assert_eq!(app.session.active().unwrap().doc.layer_count(), 4);
+    }
+}
+
+/// The Duplicate Layer body mirrors in a right-to-left UI: the captions read from the right and
+/// every field follows its caption, with the dialog as wide as its left-to-right twin.
+#[cfg(test)]
+mod rtl_tests {
+    use egui_kittest::kittest::Queryable;
+
+    use super::*;
+
+    /// The Duplicate Layer… dialog for the document's layer, rendered in `dir`.
+    fn duplicate_layer(dir: crate::text::direction::Dir) -> egui_kittest::Harness<'static, PhotocraftApp> {
+        let _dir = crate::text::direction::direction_scope(dir);
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        app.run("file.new", json!({"width": 16, "height": 16})).unwrap();
+        app.run("layer.new.layer", json!({"name": "Ink"})).unwrap();
+        let mut h = egui_kittest::Harness::builder()
+            .with_size(egui::vec2(1280.0, 800.0))
+            .build_ui_state(|ui, app| crate::dialogs::show(app, ui.ctx()), app);
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+        open(h.state_mut()).unwrap();
+        h.run_steps(4);
+        h
+    }
+
+    /// The dialog's own frame, as the host sized it.
+    fn frame(h: &egui_kittest::Harness<'static, PhotocraftApp>) -> egui::Rect {
+        let id = h.state().ui.dialogs.last().unwrap().id;
+        h.ctx.memory(|m| m.area_rect(egui::Id::unique(("dialog", id)))).expect("the dialog")
+    }
+
+    /// The body reads from the left in a left-to-right UI and from the right in a right-to-left
+    /// one: the Destination header starts at the reading start and the name field follows its
+    /// caption towards the reading end.
+    #[test]
+    fn rtl_the_duplicate_layer_body_mirrors() {
+        let ltr = duplicate_layer(crate::text::direction::Dir::Ltr);
+        let ltr_frame = frame(&ltr);
+        let ltr_header = ltr.get_by_label("Destination").rect();
+        let ltr_name = ltr.get_by_label("Name:").rect();
+        assert!(ltr_header.left() - ltr_frame.left() < 40.0, "the header reads from the left: {ltr_header:?} in {ltr_frame:?}");
+        assert!(ltr_name.left() > ltr_header.left(), "the name field follows its caption: {ltr_name:?} vs {ltr_header:?}");
+
+        let rtl = duplicate_layer(crate::text::direction::Dir::Rtl);
+        let rtl_frame = frame(&rtl);
+        let rtl_header = rtl.get_by_label("Destination").rect();
+        let rtl_name = rtl.get_by_label("Name:").rect();
+        assert!(rtl_frame.right() - rtl_header.right() < 40.0, "the header reads from the right: {rtl_header:?} in {rtl_frame:?}");
+        assert!(rtl_name.right() < rtl_header.right(), "the name field follows its caption: {rtl_name:?} vs {rtl_header:?}");
+        assert!(rtl_frame.right() - rtl_name.right() < 120.0, "the field hugs the reading start: {rtl_name:?} in {rtl_frame:?}");
+    }
+
+    /// The mirrored body keeps the dialog as wide as its left-to-right twin.
+    #[test]
+    fn rtl_the_duplicate_layer_dialog_keeps_its_width() {
+        let width = |dir| frame(&duplicate_layer(dir)).width();
+        let ltr = width(crate::text::direction::Dir::Ltr);
+        let rtl = width(crate::text::direction::Dir::Rtl);
+        assert!((ltr - rtl).abs() < 1.0, "LTR {ltr} vs RTL {rtl}");
     }
 }
