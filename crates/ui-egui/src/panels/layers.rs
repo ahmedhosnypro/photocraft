@@ -644,19 +644,19 @@ mod tests {
             h.run_steps(3);
             let row = (*h.state()).expect("the row's rect was recorded");
             let blend = h.query_all_by_label("Blend Mode").next().expect("the blend dropdown is drawn").rect();
-            // The Opacity field and its ▾ share the accessible name; the field is the wider one.
+            // The field, its ▾ and the scrub label all carry the Opacity name; the field is the widest.
             let opacity = h
-                .query_all_by_label("Opacity")
+                .query_all_by_label_contains("Opacity")
                 .map(|n| n.rect())
                 .max_by(|a, b| a.width().total_cmp(&b.width()))
                 .expect("the Opacity field is drawn");
+            // The rows center their content (main_align Center), so assert the mirrored
+            // halves, not an edge hug: dropdown on the reading-start half, field on the end half.
+            let row_mid = row.center().x;
             if dir == Dir::Ltr {
-                assert!(blend.center().x < opacity.center().x, "LTR: dropdown left of the field: {blend:?} {opacity:?}");
-                assert!((opacity.right() - row.right()).abs() < 2.0, "LTR: the field hugs the row's right end: {opacity:?} {row:?}");
+                assert!(blend.center().x < row_mid && row_mid < opacity.center().x, "LTR: dropdown left half, field right half: {blend:?} {opacity:?} {row:?}");
             } else {
-                assert!(opacity.center().x < blend.center().x, "RTL: the field is left of the dropdown: {blend:?} {opacity:?}");
-                assert!((opacity.left() - row.left()).abs() < 2.0, "RTL: the field hugs the row's left end: {opacity:?} {row:?}");
-                assert!((blend.right() - row.right()).abs() < 2.0, "RTL: the dropdown hugs the row's right end: {blend:?} {row:?}");
+                assert!(opacity.center().x < row_mid && row_mid < blend.center().x, "RTL: field left half, dropdown right half: {blend:?} {opacity:?} {row:?}");
             }
         }
     }
