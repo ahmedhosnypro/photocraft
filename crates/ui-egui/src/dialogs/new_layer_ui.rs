@@ -244,18 +244,19 @@ mod tests {
             let color = h.get_by_label("Color:").rect();
             let mode = h.get_by_label("Mode").rect();
             let clip = h.get_by_label("Use Previous Layer to Create Clipping Mask").rect();
-            (frame, color, mode, clip)
+            let spacing = h.ctx.global_style().spacing.item_spacing.x;
+            (frame, color, mode, clip, spacing)
         };
-        let (frame, color, mode, clip) = layout(crate::direction::Dir::Ltr);
+        let (frame, color, mode, clip, spacing) = layout(crate::direction::Dir::Ltr);
         assert!(color.left() - frame.left() < 80.0, "LTR: the caption hugs the reading start: {color:?} in {frame:?}");
-        // The 64 pt caption column ends at its field side, where the caption text hugs it.
-        assert!((color.right() - (frame.left() + 64.0)).abs() < 2.0, "LTR: the caption hugs the column's field side: {color:?} in {frame:?}");
+        // The caption's field side touches its editor, one item spacing away.
+        assert!((mode.left() - color.right() - spacing).abs() < 2.0, "LTR: the caption hugs its editor: {color:?} {mode:?}");
         assert!(mode.left() > color.right(), "LTR: the dropdown ends the row: {color:?} {mode:?}");
         assert!(clip.left() - frame.left() > 70.0, "LTR: the checkbox row indents past the captions: {clip:?} in {frame:?}");
-        let (frame, color, mode, clip) = layout(crate::direction::Dir::Rtl);
+        let (frame, color, mode, clip, spacing) = layout(crate::direction::Dir::Rtl);
         assert!(frame.right() - color.right() < 80.0, "RTL: the caption hugs the reading start: {color:?} in {frame:?}");
-        // The 64 pt caption column ends at its field side, where the caption text hugs it.
-        assert!((frame.right() - 64.0 - color.left()).abs() < 2.0, "RTL: the caption hugs the column's field side: {color:?} in {frame:?}");
+        // The caption's field side touches its editor, one item spacing away.
+        assert!((color.left() - mode.right() - spacing).abs() < 2.0, "RTL: the caption hugs its editor: {color:?} {mode:?}");
         assert!(mode.right() < color.left(), "RTL: the dropdown follows the caption to the reading end: {color:?} {mode:?}");
         assert!(frame.right() - clip.right() > 70.0, "RTL: the checkbox row indents past the captions: {clip:?} in {frame:?}");
         // The mirrored dialog is the same width as the left-to-right one.
