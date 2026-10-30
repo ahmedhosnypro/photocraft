@@ -119,11 +119,12 @@ mod tests {
         (h, col)
     }
 
-    /// The name field's rect, the "Name:" caption's edge that hugs it, and the column they are
-    /// drawn in.
-    fn probe(dir: crate::direction::Dir) -> (egui::Rect, f32, egui::Rect) {
+    /// The name field's rect, the "Name:" caption's edge that hugs it, the column they are
+    /// drawn in, and the "From:" dropdown's rect.
+    fn probe(dir: crate::direction::Dir) -> (egui::Rect, f32, egui::Rect, egui::Rect) {
         let (h, col) = harness(dir);
         let field = h.get_by_role(egui::accesskit::Role::TextInput).rect();
+        let from = h.get_by_label("From").rect();
         let (left, width) = h
             .output()
             .shapes
@@ -136,18 +137,21 @@ mod tests {
         // The caption hugs the field: its right edge in a left-to-right row, its left in a
         // mirrored one.
         let caption = if dir == crate::direction::Dir::Rtl { left } else { left + width };
-        (field, caption, col)
+        (field, caption, col, from)
     }
 
     /// Photoshop Arabic: the rows read from the right — the caption comes first in reading
     /// order and the field follows it, the exact mirror of the left-to-right dialog.
     #[test]
     fn the_rows_read_mirrored_under_rtl() {
-        let (ltr_field, ltr_caption, ltr_col) = probe(crate::direction::Dir::Ltr);
-        let (rtl_field, rtl_caption, rtl_col) = probe(crate::direction::Dir::Rtl);
+        let (ltr_field, ltr_caption, ltr_col, ltr_from) = probe(crate::direction::Dir::Ltr);
+        let (rtl_field, rtl_caption, rtl_col, rtl_from) = probe(crate::direction::Dir::Rtl);
         // The caption comes before the field in a left-to-right row and after it in a mirrored one.
         assert!(ltr_field.left() - ltr_col.left() > 50.0, "LTR: the caption comes before the field: {ltr_field:?} in {ltr_col:?}");
         assert!(rtl_col.right() - rtl_field.right() > 50.0, "RTL: the caption comes after the field: {rtl_field:?} in {rtl_col:?}");
+        // The "From:" dropdown follows its caption the same way (~72 pt from the reading start).
+        assert!(ltr_from.left() - ltr_col.left() > 50.0, "LTR: the caption comes before the dropdown: {ltr_from:?} in {ltr_col:?}");
+        assert!(rtl_col.right() - rtl_from.right() > 50.0, "RTL: the caption comes after the dropdown: {rtl_from:?} in {rtl_col:?}");
         // The field and the caption mirror about the column's centre.
         let centre = ltr_col.left() + rtl_col.right();
         assert!((ltr_field.left() + rtl_field.right() - centre).abs() < 1.0, "the field mirrors: {ltr_field:?} / {rtl_field:?}");
@@ -165,5 +169,26 @@ mod tests {
         let (rtl_pos, rtl_align) = caption_anchor(r, true);
         assert!(matches!(rtl_align, Align2::LEFT_CENTER), "the caption is left-aligned: {rtl_align:?}");
         assert!((rtl_pos.x - (r.left() + 6.0)).abs() < 0.01, "the caption sits at the left of its box: {rtl_pos:?}");
+    }
+
+    /// The dialog opened through the host (`crate::dialogs::show`) in `dir`; its frame's width.
+    fn host_frame_width(dir: crate::direction::Dir) -> f32 {
+        let _dir = crate::direction::direction_scope(dir);
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.run("file.new", json!({"width": 64, "height": 64})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1280.0, 800.0)).build_ui_state(|ui, app| crate::dialogs::show(app, ui.ctx()), app);
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+        let id = open(h.state_mut()).expect("the dialog opens");
+        h.run_steps(4);
+        h.ctx.memory(|m| m.area_rect(egui::Id::unique(("dialog", id)))).expect("the dialog is on screen").width()
+    }
+
+    /// The body scope must not balloon the modal: the New Snapshot dialog opens as wide in a
+    /// right-to-left UI as in a left-to-right one.
+    #[test]
+    fn the_dialog_opens_as_wide_in_rtl_as_in_ltr() {
+        let ltr = host_frame_width(crate::direction::Dir::Ltr);
+        let rtl = host_frame_width(crate::direction::Dir::Rtl);
+        assert!((ltr - rtl).abs() < 1.0, "the frame width is the same in both directions: LTR {ltr} vs RTL {rtl}");
     }
 }
