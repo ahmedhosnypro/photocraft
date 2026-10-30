@@ -258,8 +258,9 @@ fn row_button(label: &'static str, keys: &str, rtl: bool) -> egui::Button<'stati
     let mut b = crate::menu_keys::menu_row_button(label.into(), shortcut, rtl);
     if rtl && keys.is_empty() {
         // A row without a shortcut has no spacer: give it one, so its label hugs the reading
-        // start like every other row's.
-        b = b.left_text(egui::Atom::grow());
+        // start like every other row's. `left_text` adds a spacer of its own, so the atom
+        // given here is empty and adds no width.
+        b = b.left_text(egui::Atom::default());
     }
     b
 }
@@ -423,12 +424,13 @@ mod tests {
         let atoms = rtl.atoms();
         let label = atoms.iter().position(|a| matches!(&a.kind, egui::AtomKind::Text(t) if t.text() == "Delete")).expect("the label");
         assert_eq!(label, atoms.len() - 1, "the label is the last atom, so the spacer pushes it to the reading end");
-        assert!(atoms.iter().take(label).any(|a| a.grow), "the row reserves a spacer");
+        assert_eq!(atoms.iter().filter(|a| a.grow).count(), 1, "the row reserves one spacer");
     }
 
     /// The menu in a left-to-right UI: the label at the row's left, its shortcut at the right.
     #[test]
     fn in_ltr_the_edit_menu_keeps_the_shortcut_after_the_label() {
+        let _ltr = crate::direction::direction_scope(crate::direction::Dir::Ltr);
         let (mut h, field) = renaming();
         right_click(&mut h, field);
         let shortcut = crate::shortcuts::pretty("Cmd+Z");
