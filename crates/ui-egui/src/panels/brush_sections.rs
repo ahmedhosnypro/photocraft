@@ -130,7 +130,7 @@ fn size_row(ui: &mut egui::Ui, label: &str, size: &mut f32, max: f32, restore: O
     let t = Tokens::get(ui.ctx());
     ui.horizontal(|ui| {
         ui.label(RichText::new(tl!(label)).color(t.text_dim));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.with_layout(crate::direction::trailing(), |ui| {
             let mut s = *size;
             if widgets::value_field(ui, &mut s, 1.0..=max, "px", 74.0).accessible_name(tl!(label)).changed() {
                 *size = s.round().clamp(1.0, max);
@@ -330,7 +330,7 @@ fn tip_shape(ui: &mut egui::Ui, b: &mut BrushSettings, presets: &[BrushPreset], 
         ui.vertical(|ui| {
             ui.add_space(10.0);
             ui.horizontal(|ui| {
-                ui.allocate_ui_with_layout(vec2(72.0, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| dim(ui, tl!("Angle:")));
+                ui.allocate_ui_with_layout(vec2(72.0, 24.0), crate::direction::row(), |ui| dim(ui, tl!("Angle:")));
                 let mut a = b.angle;
                 if widgets::value_field(ui, &mut a, -180.0..=180.0, "°", 70.0).accessible_name(tl!("Angle:")).changed() {
                     b.angle = a.round().clamp(-180.0, 180.0);
@@ -338,7 +338,7 @@ fn tip_shape(ui: &mut egui::Ui, b: &mut BrushSettings, presets: &[BrushPreset], 
             });
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.allocate_ui_with_layout(vec2(72.0, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| dim(ui, tl!("Roundness:")));
+                ui.allocate_ui_with_layout(vec2(72.0, 24.0), crate::direction::row(), |ui| dim(ui, tl!("Roundness:")));
                 let mut r = (b.roundness * 100.0).round();
                 if widgets::value_field(ui, &mut r, 1.0..=100.0, "%", 70.0).accessible_name(tl!("Roundness:")).changed() {
                     b.roundness = (r.round() / 100.0).clamp(0.01, 1.0);
@@ -615,32 +615,40 @@ pub fn section_body(ui: &mut egui::Ui, b: &mut BrushSettings, i: usize, presets:
     let note = |ui: &mut egui::Ui, s: &str| {
         ui.label(RichText::new(s).color(t.text_faint).font(theme::medium(11.5)));
     };
-    if i == 0 {
-        return tip_shape(ui, b, presets, current);
-    }
-    match i {
-        1 => shape_dynamics(ui, b),
-        2 => scattering(ui, b),
-        3 => texture(ui, b),
-        4 => dual_brush(ui, b, presets),
-        5 => color_dynamics(ui, b),
-        6 => {
-            transfer(ui, b, tool);
-            mixer_options(ui, b);
+    // One section body fills the panel at a time: scope the whole body so nested plain
+    // `ui.horizontal` rows mirror exactly once in RTL (LTR keeps the default top_down(Min)).
+    ui.allocate_ui_with_layout(ui.available_size_before_wrap(), crate::direction::body_layout(), |ui| {
+        if i == 0 {
+            return tip_shape(ui, b, presets, current);
         }
-        7 => pose(ui, b),
-        8 => note(ui, "Adds extra randomness to the soft edges of the brush tip. No options: turn it on in the list."),
-        9 => note(ui, "Builds up paint along the edges of the stroke for a watercolour look. No options: turn it on in the list."),
-        10 => {
-            note(ui, tl!("Airbrush: keeps depositing paint while the pointer rests."));
-            ui.add_space(6.0);
-            num(ui, tl!("Rate"), &mut b.build_up_rate, 1.0..=200.0, "/s");
+        match i {
+            1 => shape_dynamics(ui, b),
+            2 => scattering(ui, b),
+            3 => texture(ui, b),
+            4 => dual_brush(ui, b, presets),
+            5 => color_dynamics(ui, b),
+            6 => {
+                transfer(ui, b, tool);
+                mixer_options(ui, b);
+            }
+            7 => pose(ui, b),
+            8 => note(ui, "Adds extra randomness to the soft edges of the brush tip. No options: turn it on in the list."),
+            9 => note(ui, "Builds up paint along the edges of the stroke for a watercolour look. No options: turn it on in the list."),
+            10 => {
+                note(ui, tl!("Airbrush: keeps depositing paint while the pointer rests."));
+                ui.add_space(6.0);
+                num(ui, tl!("Rate"), &mut b.build_up_rate, 1.0..=200.0, "/s");
+            }
+            11 => smoothing(ui, b),
+            _ => note(ui, "Keeps the current pattern and scale when you switch to another textured brush preset."),
         }
-        11 => smoothing(ui, b),
-        _ => note(ui, "Keeps the current pattern and scale when you switch to another textured brush preset."),
-    }
-    None
+        None
+    })
+    .inner
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod rtl_tests;
