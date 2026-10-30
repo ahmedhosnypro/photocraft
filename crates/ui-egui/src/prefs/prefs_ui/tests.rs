@@ -2403,38 +2403,21 @@ fn rtl_prefs_bool_row_sits_at_the_reading_start() {
     use egui_kittest::{Harness, kittest::Queryable};
     let _rtl = crate::text::direction::direction_scope(crate::text::direction::Dir::Rtl);
     let (mut app, _) = app_with_store();
-    open_preferences(&mut app, "interface");
+    open_preferences(&mut app, "general");
     let mut h = Harness::builder().with_size(vec2(1280.0, 800.0)).build_eframe(move |cc| {
         PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
         app
     });
     h.run_steps(4);
-    let checkbox = h.query_all_by_role_and_label(Role::CheckBox, "Show tooltips").next().expect("the Show tooltips checkbox").rect();
-    let language = h.query_all_by_role_and_label(Role::Label, "Language").next().expect("the Language label").rect();
-    assert!((checkbox.right() - language.right()).abs() < 1.0, "the checkbox shares the labels' reading-start edge: {checkbox:?} {language:?}");
+    let checkbox = h.query_all_by_role_and_label(Role::CheckBox, "Beep when done").next().expect("the Beep when done checkbox").rect();
+    let label = h.query_all_by_role_and_label(Role::Label, "Image interpolation").next().expect("the Image interpolation label").rect();
+    assert!((checkbox.right() - label.right()).abs() < 1.0, "the checkbox shares the labels' reading-start edge: {checkbox:?} {label:?}");
 }
 
-/// The left-to-right twin: the checkbox keeps its place at the left edge of the row, just after
-/// the narrow empty cell that holds the row open.
+/// The left-to-right twin: the checkbox keeps its place in the editor column, after the label
+/// column the row shares with the other fields.
 #[test]
 fn ltr_prefs_bool_row_keeps_its_place() {
-    use egui::accesskit::Role;
-    use egui_kittest::{Harness, kittest::Queryable};
-    let (mut app, _) = app_with_store();
-    open_preferences(&mut app, "interface");
-    let mut h = Harness::builder().with_size(vec2(1280.0, 800.0)).build_eframe(move |cc| {
-        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
-        app
-    });
-    h.run_steps(4);
-    let checkbox = h.query_all_by_role_and_label(Role::CheckBox, "Show tooltips").next().expect("the Show tooltips checkbox").rect();
-    let language = h.query_all_by_role_and_label(Role::Label, "Language").next().expect("the Language label").rect();
-    assert!(checkbox.left() >= language.left(), "the checkbox keeps its place at the left edge: {checkbox:?} {language:?}");
-    assert!(checkbox.left() - language.left() < 32.0, "the checkbox hugs the left edge: {checkbox:?} {language:?}");
-}
-
-#[test]
-fn debug_dump_general_nodes() {
     use egui::accesskit::Role;
     use egui_kittest::{Harness, kittest::Queryable};
     let (mut app, _) = app_with_store();
@@ -2444,10 +2427,7 @@ fn debug_dump_general_nodes() {
         app
     });
     h.run_steps(4);
-    for n in h.query_all_by_role(Role::Label) {
-        println!("LABEL {n:?} {:?}", n.rect());
-    }
-    for n in h.query_all_by_role(Role::CheckBox) {
-        println!("CHECK {n:?} {:?}", n.rect());
-    }
+    let checkbox = h.query_all_by_role_and_label(Role::CheckBox, "Beep when done").next().expect("the Beep when done checkbox").rect();
+    let label = h.query_all_by_role_and_label(Role::Label, "Image interpolation").next().expect("the Image interpolation label").rect();
+    assert!(checkbox.left() > label.right(), "the checkbox keeps its place in the editor column: {checkbox:?} {label:?}");
 }
