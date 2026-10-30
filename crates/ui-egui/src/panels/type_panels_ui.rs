@@ -201,7 +201,8 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
     if app.ui.type_panels.glyphs {
         let mut close = false;
         let x = if crate::text::direction::is_rtl() {
-            (canvas.left() + 24.0 + 372.0).min(canvas.right() - 8.0 - 340.0).max(canvas.left() + 8.0)
+            // Mirror of the LTR cascade: 314 + 372 - 340 keeps the 32 px gap to Type Styles.
+            (canvas.left() + 346.0).min(canvas.right() - 8.0 - 340.0).max(canvas.left() + 8.0)
         } else {
             (canvas.right() - 314.0 - 372.0).max(canvas.left() + 8.0)
         };
@@ -411,7 +412,10 @@ fn options_editor(app: &mut PhotocraftApp, ui: &mut egui::Ui, paragraph: bool, s
     // Preferences ▸ Units & Rulers ▸ Type: the model stores points; the fields may show pixels
     // (by the document's resolution) or millimetres.
     let (type_unit, unit_label) = crate::type_tool::type_unit(app);
-    egui::Grid::new(("style-opts", paragraph, id)).num_columns(3).spacing([6.0, 3.0]).show(ui, |ui| {
+    let rtl = crate::text::direction::is_rtl();
+    // The grid is direction-blind, so in a right-to-left UI it gets one column per row and each
+    // row's content is a mirrored hand row (see the loops below).
+    egui::Grid::new(("style-opts", paragraph, id)).num_columns(if rtl { 1 } else { 3 }).spacing([6.0, 3.0]).show(ui, |ui| {
         // (label, model key, panel key, kind)
         let rows: &[(&str, &str, &str, &str)] = &[
             (tl!("Font"), "font_family", "font", "font"),
@@ -428,8 +432,8 @@ fn options_editor(app: &mut PhotocraftApp, ui: &mut egui::Ui, paragraph: bool, s
         for &(label, key, panel, kind) in rows {
             let mut on = defined(&char_attrs, key);
             let was = on;
-            // Grid columns always advance left to right, so the cells are emitted in reading
-            // order: in a right-to-left UI the editor comes first and the checkbox ends the row.
+            // The checkbox registers first in both directions, so the keyboard focus order and
+            // the editor's same-frame enable state match the left-to-right row.
             let mut editor_cell = |ui: &mut egui::Ui, on: bool, v: &Value| {
                 ui.add_enabled_ui(on, |ui| match kind {
                     "font" => {
@@ -466,12 +470,14 @@ fn options_editor(app: &mut PhotocraftApp, ui: &mut egui::Ui, paragraph: bool, s
                     }
                 });
             };
-            if crate::text::direction::is_rtl() {
-                let v = if on { char_attrs[key].clone() } else { resolved_c[key].clone() };
-                editor_cell(ui, on, &v);
-                let row_label = ui.label(RichText::new(tl!(&label)).color(if on { t.text } else { t.text_faint }).size(11.5));
-                let on_box = ui.checkbox(&mut on, "");
-                on_box.labelled_by(row_label.id);
+            if rtl {
+                row(ui, |ui| {
+                    let on_box = ui.checkbox(&mut on, "");
+                    let row_label = ui.label(RichText::new(tl!(&label)).color(if on { t.text } else { t.text_faint }).size(11.5));
+                    on_box.labelled_by(row_label.id);
+                    let v = if on { char_attrs[key].clone() } else { resolved_c[key].clone() };
+                    editor_cell(ui, on, &v);
+                });
             } else {
                 let on_box = ui.checkbox(&mut on, "");
                 let row_label = ui.label(RichText::new(tl!(&label)).color(if on { t.text } else { t.text_faint }).size(11.5));
@@ -501,8 +507,8 @@ fn options_editor(app: &mut PhotocraftApp, ui: &mut egui::Ui, paragraph: bool, s
             for &(label, key, kind) in rows {
                 let mut on = defined(&para_attrs, key);
                 let was = on;
-                // Grid columns always advance left to right, so the cells are emitted in reading
-                // order: in a right-to-left UI the editor comes first and the checkbox ends the row.
+                // The checkbox registers first in both directions, so the keyboard focus order
+                // and the editor's same-frame enable state match the left-to-right row.
                 let mut editor_cell = |ui: &mut egui::Ui, on: bool, v: &Value| {
                     ui.add_enabled_ui(on, |ui| match kind {
                         "align" => {
@@ -541,12 +547,14 @@ fn options_editor(app: &mut PhotocraftApp, ui: &mut egui::Ui, paragraph: bool, s
                         }
                     });
                 };
-                if crate::text::direction::is_rtl() {
-                    let v = if on { para_attrs[key].clone() } else { resolved_p[key].clone() };
-                    editor_cell(ui, on, &v);
-                    let row_label = ui.label(RichText::new(tl!(&label)).color(if on { t.text } else { t.text_faint }).size(11.5));
-                    let on_box = ui.checkbox(&mut on, "");
-                    on_box.labelled_by(row_label.id);
+                if rtl {
+                    row(ui, |ui| {
+                        let on_box = ui.checkbox(&mut on, "");
+                        let row_label = ui.label(RichText::new(tl!(&label)).color(if on { t.text } else { t.text_faint }).size(11.5));
+                        on_box.labelled_by(row_label.id);
+                        let v = if on { para_attrs[key].clone() } else { resolved_p[key].clone() };
+                        editor_cell(ui, on, &v);
+                    });
                 } else {
                     let on_box = ui.checkbox(&mut on, "");
                     let row_label = ui.label(RichText::new(tl!(&label)).color(if on { t.text } else { t.text_faint }).size(11.5));
@@ -1054,22 +1062,30 @@ mod tests {
         assert_eq!(h.state().session.active().unwrap().revision, revision, "and changed nothing");
     }
 
-    /// A right-to-left UI mirrors the type panels: the × sits at the reading end of the header
-    /// row and the first tab starts at the reading start.
+    /// The Type Styles header follows the direction: the × sits at the row's far end and
+    /// Character Styles starts the reading order — rightmost in a right-to-left UI, leftmost in
+    /// a left-to-right one.
     #[test]
-    fn rtl_type_styles_window_mirrors_its_header() {
+    fn type_styles_window_header_follows_the_direction() {
         use egui_kittest::kittest::Queryable;
-        let _rtl = crate::text::direction::direction_scope(crate::text::direction::Dir::Rtl);
-        let mut app = app_with_text("Hi");
-        app.ui.type_panels.styles = true;
-        let mut h = egui_kittest::Harness::builder().with_size(vec2(1000.0, 700.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
-        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
-        h.run_steps(4);
-        let close = h.get_by_label("Close").rect();
-        let character = h.get_by_label("Character Styles").rect();
-        let paragraph = h.get_by_label("Paragraph Styles").rect();
-        assert!(close.left() < character.left(), "the × ends the reading end of the header row: {close:?} over {character:?}");
-        assert!(character.right() > paragraph.right(), "Character Styles starts the reading order: {character:?} over {paragraph:?}");
+        for (rtl, mirrored) in [(false, false), (true, true)] {
+            let _dir = crate::text::direction::direction_scope(if rtl { crate::text::direction::Dir::Rtl } else { crate::text::direction::Dir::Ltr });
+            let mut app = app_with_text("Hi");
+            app.ui.type_panels.styles = true;
+            let mut h = egui_kittest::Harness::builder().with_size(vec2(1000.0, 700.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
+            PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+            h.run_steps(4);
+            let close = h.get_by_label("Close").rect();
+            let character = h.get_by_label("Character Styles").rect();
+            let paragraph = h.get_by_label("Paragraph Styles").rect();
+            if mirrored {
+                assert!(close.left() < character.left(), "the × ends the reading end of the header row: {close:?} over {character:?}");
+                assert!(character.right() > paragraph.right(), "Character Styles starts the reading order: {character:?} over {paragraph:?}");
+            } else {
+                assert!(close.left() > character.left(), "the × ends the row's far end: {close:?} over {character:?}");
+                assert!(character.right() < paragraph.right(), "Character Styles starts the reading order: {character:?} over {paragraph:?}");
+            }
+        }
     }
 
     /// The Check Spelling close box sits at the reading end of the title row in a right-to-left
@@ -1125,7 +1141,7 @@ mod tests {
 
     /// The Glyphs panel reads right-to-left — the Category editor follows its caption and the
     /// size slider ends the footer — while the glyph grid keeps its left-to-right codepoint
-    /// order (its cells are painted, not widgets, so nothing mirrors them).
+    /// order (its cells are hand-painted, so nothing mirrors them).
     #[test]
     fn glyphs_panel_rows_follow_the_direction_but_keep_the_grid_ltr() {
         use egui_kittest::kittest::Queryable;
@@ -1151,6 +1167,9 @@ mod tests {
                 "the size slider must sit at the reading {} of the footer: {size:?} over {show:?}",
                 if editor_first { "end" } else { "start" },
             );
+            let a = h.get_by_label("U+0041").rect();
+            let b = h.get_by_label("U+0042").rect();
+            assert!(a.left() < b.left(), "the glyph grid keeps its codepoint order in both directions: {a:?} over {b:?}");
         }
     }
 
