@@ -102,7 +102,9 @@ pub(super) fn row(
 ) {
     let t = Tokens::get(ui.ctx());
     // The row reads in the UI's direction: the label at the reading start, the picker at the end.
-    ui.with_layout(crate::direction::row(), |ui| {
+    // One interaction band tall, as `ui.horizontal` allocates, so LTR keeps its top placement.
+    let size = vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y);
+    ui.allocate_ui_with_layout(size, crate::direction::row(), |ui| {
         if label.is_empty() {
             ui.add_space(16.0);
         } else {
@@ -629,5 +631,52 @@ mod library_tests {
         assert!(ltr_ok.left() > ltr_preset.left(), "the actions follow the graph: {ltr_ok:?} {ltr_preset:?}");
         let (rtl_preset, rtl_ok) = columns(crate::direction::Dir::Rtl);
         assert!(rtl_ok.right() < rtl_preset.right(), "the actions lead in a right-to-left UI: {rtl_ok:?} {rtl_preset:?}");
+    }
+}
+
+/// The Contour row keeps `ui.horizontal`'s one-band height in LTR — the mirrored row is capped
+/// to an interaction band, not the column's remaining height — and mirrors its items in RTL.
+#[cfg(test)]
+mod row_tests {
+    use super::*;
+    use crate::direction::{Dir, direction_scope};
+    use egui_kittest::kittest::Queryable;
+
+    /// The dropShadow page drawn in `dir`: (bottom of the "Size" row above the contour row,
+    /// the "Contour" label, the "Anti-aliased" checkbox).
+    fn contour_row(dir: Dir) -> (f32, egui::Rect, egui::Rect) {
+        let _dir = direction_scope(dir);
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        app.run("file.new", json!({"width": 32, "height": 32})).unwrap();
+        app.run("layer.new.layer", json!({})).unwrap();
+        let fields = {
+            let st = app.session.active().unwrap();
+            crate::layer_style::initial_fields(st.doc.layer(st.active_layer.unwrap()).unwrap(), Some("dropShadow"), 120.0)
+        };
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(900.0, 700.0)).build_ui_state(
+            |ui, (app, fields): &mut (PhotocraftApp, Map<String, Value>)| {
+                if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    let mut f = fields.clone();
+                    crate::layer_style::body(app, ui, &mut f);
+                }
+            },
+            (app, fields),
+        );
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+        h.run_steps(4);
+        let above = h.query_all_by_label("Size").map(|n| n.rect().bottom()).fold(0.0, f32::max);
+        let labelled = |label: &str| h.query_all_by_label(label).next().expect(label).rect();
+        (above, labelled("Contour"), labelled("Anti-aliased"))
+    }
+
+    #[test]
+    fn the_contour_row_keeps_its_band_in_ltr_and_mirrors_in_rtl() {
+        let (ltr_above, ltr_contour, ltr_aa) = contour_row(Dir::Ltr);
+        assert!(ltr_contour.top() - ltr_above < 12.0, "LTR: the row hugs the row above, one band tall: {ltr_contour:?}");
+        assert!(ltr_aa.left() > ltr_contour.right(), "LTR: the label reads before the controls: {ltr_contour:?} {ltr_aa:?}");
+        let (rtl_above, rtl_contour, rtl_aa) = contour_row(Dir::Rtl);
+        assert!(rtl_contour.top() - rtl_above < 12.0, "RTL: same band, not the remaining column height: {rtl_contour:?}");
+        assert!(rtl_aa.right() < rtl_contour.left(), "RTL: the label sits at the reading start: {rtl_contour:?} {rtl_aa:?}");
+        assert!((ltr_contour.top() - rtl_contour.top()).abs() < 2.0, "the mirroring moves x, not y: {ltr_contour:?} {rtl_contour:?}");
     }
 }
