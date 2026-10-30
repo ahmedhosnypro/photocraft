@@ -2898,3 +2898,105 @@ fn damage_grows_by_nested_effect_reach() {
     group.visible = false;
     assert_eq!(effect_reach(&[group]), 0);
 }
+
+/// The canvas stays left-to-right in a right-to-left UI (rtl-canvas-guard): the document ↔
+/// screen mapping, a crop frame's screen rectangle and a wheel zoom land exactly where they
+/// land in a left-to-right UI.
+#[test]
+fn canvas_geometry_is_rtl_invariant() {
+    use crate::direction::{Dir, direction_scope};
+    let rect = Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0));
+    let xf = ViewXform { rect, zoom: 1.0, center: [400.0, 300.0], flip: false, rotation: 0.0, aspect: 1.0 };
+    let crop = DRect::new(20, 30, 120, 130);
+    let probe = |xf: &ViewXform| {
+        let mut mapped = Vec::new();
+        for p in [pos2(10.0, 20.0), pos2(400.0, 300.0), pos2(790.0, 590.0)] {
+            let doc = xf.to_doc(p);
+            mapped.push((doc, xf.to_screen(doc[0] as f32, doc[1] as f32)));
+        }
+        let mut view = View { zoom: 1.0, center: [400.0, 300.0], ..Default::default() };
+        zoom_about(&mut view, xf, pos2(600.0, 200.0), 2.0, false, 1.0);
+        (mapped, xf.doc_rect(crop), view.center)
+    };
+    let ltr = {
+        let _ltr = direction_scope(Dir::Ltr);
+        probe(&xf)
+    };
+    let rtl = {
+        let _rtl = direction_scope(Dir::Rtl);
+        probe(&xf)
+    };
+    assert_eq!(rtl.0, ltr.0, "the screen ↔ document mapping is unchanged");
+    assert_eq!(rtl.1, ltr.1, "the crop frame's screen rectangle is unchanged");
+    assert_eq!(rtl.2, ltr.2, "the wheel zoom lands in the same place");
+}
+
+/// The drag readout is canvas-anchored measurement geometry: in a right-to-left UI its labels
+/// stay left of their numbers, and the numbers keep reading left to right.
+#[test]
+fn the_drag_readout_stays_left_to_right_in_a_right_to_left_ui() {
+    use crate::direction::{Dir, direction_scope};
+    // The labels are translated, so pin the language the test reads them in.
+    let _en = crate::i18n::language_scope(crate::i18n::Lang::EN);
+    let ctx = egui::Context::default();
+    crate::theme::install_fonts(&ctx);
+    // The egui fork mirrors the widgets it owns in a right-to-left style.
+    ctx.all_styles_mut(|s| s.set_right_to_left(true));
+    let positions = |ctx: &egui::Context| {
+        let out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            super::drag::draw_readout(ui.ctx(), "rtl-readout", pos2(40.0, 60.0), ["W:", "H:"], ["120 px".to_string(), "80 px".to_string()]);
+        });
+        out.shapes
+            .iter()
+            .filter_map(|s| match &s.shape {
+                egui::Shape::Text(t) => Some((t.galley.text().to_string(), t.pos)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let ltr = {
+        let _ltr = direction_scope(Dir::Ltr);
+        positions(&ctx)
+    };
+    let rtl = {
+        let _rtl = direction_scope(Dir::Rtl);
+        positions(&ctx)
+    };
+    assert_eq!(rtl, ltr, "the readout is laid out the same way in both directions");
+    for (label, value) in [("W:", "120 px"), ("H:", "80 px")] {
+        let lx = ltr.iter().find(|(t, _)| t == label).map(|(_, p)| p.x).expect("the label is drawn");
+        let vx = ltr.iter().find(|(t, _)| t == value).map(|(_, p)| p.x).expect("the value is drawn");
+        assert!(lx < vx, "{label} stays left of {value}");
+    }
+}
+
+/// The layer menu opened from the canvas stays anchored at the click point in a right-to-left
+/// UI: the rows inside it may mirror, the menu itself must not move (rtl-canvas-guard).
+#[test]
+fn the_layer_menu_stays_anchored_in_a_right_to_left_ui() {
+    use crate::direction::{Dir, direction_scope};
+    let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+    app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+    let ctx = egui::Context::default();
+    // The egui fork mirrors the widgets it owns in a right-to-left style.
+    ctx.all_styles_mut(|s| s.set_right_to_left(true));
+    let at = [60.0f32, 70.0];
+    assert!(super::layer_pick_ui::open(&mut app, &ctx, at, 100.0, 100.0), "the menu opens over the layer");
+    let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 700.0))), ..Default::default() };
+    let area = |ctx: &egui::Context, app: &mut PhotocraftApp| {
+        ctx.run_ui(input.clone(), |ui| super::layer_pick_ui::show(app, ui.ctx()));
+        ctx.memory(|m| m.area_rect(egui::Id::unique("canvas-layer-menu")))
+    };
+    let ltr = {
+        let _ltr = direction_scope(Dir::Ltr);
+        area(&ctx, &mut app)
+    };
+    let rtl = {
+        let _rtl = direction_scope(Dir::Rtl);
+        area(&ctx, &mut app)
+    };
+    let ltr = ltr.expect("the menu area is shown");
+    let rtl = rtl.expect("the menu area is shown");
+    assert_eq!(rtl.min, ltr.min, "the menu does not move");
+    assert!((ltr.min - Pos2::new(at[0], at[1])).length() < 0.5, "the menu opens at the click point: {:?}", ltr.min);
+}
