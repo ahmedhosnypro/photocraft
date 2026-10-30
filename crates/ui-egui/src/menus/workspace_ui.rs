@@ -386,7 +386,7 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
         let alt = crate::shortcuts::pretty("Alt");
         crate::analysis_ui::panel_window(app, ctx, "modifier-keys", tl!("Modifier Keys"), vec2(-420.0, 80.0), 150.0, |ui| {
             close = crate::analysis_ui::title_row(ui, tl!("Modifier Keys"));
-            ui.horizontal(|ui| {
+            ui.with_layout(crate::text::direction::row(), |ui| {
                 for (label, on) in [(&*shift, &mut s.sticky_shift), (&*cmd, &mut s.sticky_command), (&*alt, &mut s.sticky_alt)] {
                     if ui.add(egui::Button::new(RichText::new(label).size(14.0)).selected(*on).min_size(vec2(40.0, 30.0))).clicked() {
                         *on = !*on;
@@ -416,7 +416,7 @@ fn dialog(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 crate::widgets::hairline(ui);
                 ui.add_space(6.0);
                 let text = |ui: &mut egui::Ui, f: &mut Map<String, Value>, key: &str, label: &str| {
-                    ui.horizontal(|ui| {
+                    ui.with_layout(crate::text::direction::row(), |ui| {
                         ui.label(RichText::new(tl!(&label)).color(t.text_dim).size(11.0));
                         let mut v = f.get(key).and_then(Value::as_str).unwrap_or("").to_string();
                         if ui.add(egui::TextEdit::singleline(&mut v).desired_width(180.0)).accessible_name(tl!(label)).changed() {
@@ -431,7 +431,7 @@ fn dialog(app: &mut PhotocraftApp, ctx: &egui::Context) {
                     }
                 };
                 let number = |ui: &mut egui::Ui, f: &mut Map<String, Value>, key: &str, label: &str, range: std::ops::RangeInclusive<f32>| {
-                    ui.horizontal(|ui| {
+                    ui.with_layout(crate::text::direction::row(), |ui| {
                         ui.label(RichText::new(tl!(&label)).color(t.text_dim).size(11.0));
                         let mut v = f.get(key).and_then(Value::as_f64).unwrap_or(0.0) as f32;
                         if crate::widgets::slider(ui, &mut v, range.clone(), None).changed()
