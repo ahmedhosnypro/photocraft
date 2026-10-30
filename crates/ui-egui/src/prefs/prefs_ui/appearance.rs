@@ -413,6 +413,43 @@ mod tests {
         assert!((badge.center() - corner).length() < 1.0, "the badge keeps its physical corner: {badge:?} {first:?}");
     }
 
+    /// Temporary debug: where does the NaN come from?
+    #[test]
+    fn debug_grid_cells_rtl() {
+        use egui_kittest::kittest::NodeT;
+        let _rtl = direction_scope(Dir::Rtl);
+        let mut h = Harness::builder().with_size(vec2(520.0, 480.0)).build_ui_state(
+            |ui: &mut egui::Ui, _: &mut Map<String, Value>| {
+                ui.with_layout(body_layout(), |ui| {
+                    egui::Grid::new("g-plain").num_columns(2).show(ui, |ui| {
+                        crate::direction::grid_cells(ui, |ui| { ui.label("PlainLabel"); }, |ui| { ui.label("PlainEditor"); });
+                        ui.end_row();
+                    });
+                    egui::Grid::new("g-combo").num_columns(2).show(ui, |ui| {
+                        crate::direction::grid_cells(ui, |ui| { ui.label("ComboLabel"); }, |ui| {
+                            let mut cur = "x".to_string();
+                            crate::widgets::dropdown(ui, "combo", "Combo", &mut cur, &[("x".to_string(), "X")], 220.0);
+                        });
+                        ui.end_row();
+                    });
+                    egui::Grid::new("g-combo-min").num_columns(2).min_col_width(150.0).show(ui, |ui| {
+                        crate::direction::grid_cells(ui, |ui| { ui.label("ComboMinLabel"); }, |ui| {
+                            let mut cur = "y".to_string();
+                            crate::widgets::dropdown(ui, "combo2", "Combo2", &mut cur, &[("y".to_string(), "Y")], 220.0);
+                        });
+                        ui.end_row();
+                    });
+                });
+            },
+            Map::new(),
+        );
+        h.run_steps(3);
+        for node in h.root().children_recursive() {
+            println!("{:?} {:?} {:?}", node.accesskit_node().role(), node.value(), node.accesskit_node().bounding_box());
+        }
+        panic!("dump");
+    }
+
     /// The left-to-right twin: the label keeps its place at the left and the first swatch stays
     /// the leftmost one.
     #[test]
