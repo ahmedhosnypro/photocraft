@@ -801,7 +801,7 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 } else {
                     egui::Grid::new(format!("gallery-cat-{ci}")).spacing([6.0, 6.0]).show(ui, |ui| {
                         for (n, (i, f)) in members.iter().copied().enumerate() {
-                            let selected = d.effects.get(d.selected).is_some_and(|e| e.filter == *f);
+                            let selected = d.effects.get(d.selected).is_some_and(|e| e.filter == f);
                             if gallery_cell(ui, d, i, f, selected, rtl, &t).clicked() {
                                 d.set_filter(f);
                             }
@@ -1000,7 +1000,7 @@ mod rtl_tests {
     }
 
     /// A primary click at `p`: move, press, release, then settle.
-    fn click(h: &egui_kittest::Harness<'_, PhotocraftApp>, p: egui::Pos2) {
+    fn click(h: &mut egui_kittest::Harness<'_, PhotocraftApp>, p: egui::Pos2) {
         h.event(egui::Event::PointerMoved(p));
         h.run_steps(1);
         h.event(egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
@@ -1029,7 +1029,7 @@ mod rtl_tests {
             egui::Shape::Mesh(m) => {
                 let mut v = m.vertices.iter().map(|v| v.pos);
                 let first = v.next()?;
-                let r = v.fold(ERect::from_min_max(first, first), |r, p| r.expand_to_include(p));
+                let r = v.fold(ERect::from_min_max(first, first), |r, p| r.union(ERect::from_min_size(p, egui::Vec2::ZERO)));
                 let on_row = (r.center().y - name.center().y).abs() < 8.0;
                 (band.intersects(r) && on_row && r.width() < 20.0 && r.height() < 20.0).then_some(r)
             }
