@@ -86,7 +86,9 @@ const TRANSPORT: [Transport; 7] = [
 
 /// The transport strip inside a row already laid out in its screen direction: emitted in table
 /// order under a left-to-right layout, in reverse under a right-to-left one, so the drawn order
-/// is always the physical left-to-right transport order ([`TRANSPORT`]).
+/// is always the physical left-to-right transport order ([`TRANSPORT`]). The reversed emission
+/// also reverses the strip's registration (tab/focus) order under RTL; accepted because the
+/// strip is an unmirrored physical island and mirroring focus would fight the mirrored row.
 fn transport(
     ui: &mut egui::Ui,
     playing: bool,
@@ -160,67 +162,60 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
     let t = Tokens::get(ctx);
 
     crate::analysis_ui::panel_window(app, ctx, "timeline", tl!("Timeline"), vec2(0.0, 520.0), 660.0, |ui| {
-        crate::direction::window_body(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(tl!("Timeline")).strong().color(t.text));
-                ui.with_layout(crate::direction::trailing(), |ui| {
-                    if crate::icons::button(ui, "x", 20.0, false, tl!("Close")).clicked() {
-                        close = true;
-                    }
-                });
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(tl!("Timeline")).strong().color(t.text));
+            ui.with_layout(crate::direction::trailing(), |ui| {
+                if crate::icons::button(ui, "x", 20.0, false, tl!("Close")).clicked() {
+                    close = true;
+                }
             });
-            ui.separator();
+        });
+        ui.separator();
 
-            if !have_doc {
-                ui.weak(tl!("Open a document to use the timeline."));
-                return;
+        if !have_doc {
+            ui.weak(tl!("Open a document to use the timeline."));
+            return;
+        }
+        match &tl {
+            None => {
+                ui.add_space(8.0);
+                ui.vertical_centered(|ui| {
+                    if crate::widgets::primary_button(ui, tl!("Create Video Timeline"), 200.0).clicked() {
+                        act = Some(("timeline.create", json!({ "duration": 30, "fps": 30.0 })));
+                    }
+                    ui.add_space(4.0);
+                    ui.weak(tl!("30 frames @ 30 fps"));
+                });
             }
-            match &tl {
-                None => {
-                    ui.add_space(8.0);
-                    ui.vertical_centered(|ui| {
-                        if crate::widgets::primary_button(ui, tl!("Create Video Timeline"), 200.0).clicked() {
-                            act = Some(("timeline.create", json!({ "duration": 30, "fps": 30.0 })));
-                        }
-                        ui.add_space(4.0);
-                        ui.weak(tl!("30 frames @ 30 fps"));
+            Some(tl) => {
+                ui.horizontal(|ui| {
+                    // Media transport is physical: the frame axis runs LTR like the canvas,
+                    // so the controls keep their physical order and hug the reading start,
+                    // while the delete cluster takes the reading end.
+                    let rtl = crate::direction::is_rtl();
+                    ui.with_layout(crate::direction::row(), |ui| {
+                        transport(ui, playing, rtl, &mut act, &mut stop_play, &mut toggle_play, tl);
                     });
-                }
-                Some(tl) => {
-                    ui.horizontal(|ui| {
-                        // Media transport is physical: the frame axis runs LTR like the canvas,
-                        // so the controls keep their physical order and hug the reading start,
-                        // while the delete cluster takes the reading end.
-                        let rtl = crate::direction::is_rtl();
-                        let transport_layout = if rtl {
-                            egui::Layout::right_to_left(egui::Align::Center)
-                        } else {
-                            egui::Layout::left_to_right(egui::Align::Center)
-                        };
-                        ui.with_layout(transport_layout, |ui| {
-                            transport(ui, playing, rtl, &mut act, &mut stop_play, &mut toggle_play, tl);
-                        });
-                        ui.with_layout(crate::direction::trailing(), |ui| {
-                            if crate::icons::button(ui, "trash", 20.0, false, tl!("Delete Timeline")).clicked() {
-                                stop_play = true;
-                                act = Some(("timeline.delete", json!({})));
-                            }
-                            ui.label(RichText::new(format!("{:.0} fps", tl.fps)).color(t.text_dim));
-                        });
-                    });
-                    ui.add_space(6.0);
-                    // Scrubber: frame playhead across the duration.
-                    if tl.duration > 1 {
-                        let mut frame = tl.current as f64;
-                        let resp = ui.add(egui::Slider::new(&mut frame, 0.0..=(tl.duration - 1) as f64).integer().show_value(false).text("playhead"));
-                        if resp.changed() {
+                    ui.with_layout(crate::direction::trailing(), |ui| {
+                        if crate::icons::button(ui, "trash", 20.0, false, tl!("Delete Timeline")).clicked() {
                             stop_play = true;
-                            act = Some(("timeline.setFrame", json!({ "frame": frame as u64 })));
+                            act = Some(("timeline.delete", json!({})));
                         }
+                        ui.label(RichText::new(format!("{:.0} fps", tl.fps)).color(t.text_dim));
+                    });
+                });
+                ui.add_space(6.0);
+                // Scrubber: frame playhead across the duration.
+                if tl.duration > 1 {
+                    let mut frame = tl.current as f64;
+                    let resp = ui.add(egui::Slider::new(&mut frame, 0.0..=(tl.duration - 1) as f64).integer().show_value(false).text("playhead"));
+                    if resp.changed() {
+                        stop_play = true;
+                        act = Some(("timeline.setFrame", json!({ "frame": frame as u64 })));
                     }
                 }
             }
-        });
+        }
     });
 
     if close {
