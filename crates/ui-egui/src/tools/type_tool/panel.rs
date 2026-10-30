@@ -141,7 +141,7 @@ fn preset_label(v: f32, unit: &str) -> String {
 }
 
 /// A Character panel [`num_field`] with a preset chevron in the same cell, which still ends at
-/// the column's right edge. The value stays editable: presets are shortcuts, not limits.
+/// the column's reading end. The value stays editable: presets are shortcuts, not limits.
 /// `presets` are groups of model values (split by separators), shown multiplied by `u`; `auto`
 /// adds an Auto item first (`Some(true)` when Auto is current).
 #[allow(clippy::too_many_arguments)]
@@ -212,6 +212,16 @@ pub fn character_panel(app: &mut PhotocraftApp, ui: &mut egui::Ui, paragraph: bo
 /// The Character and/or Paragraph sections, with the shared collapsible headers and fields that
 /// fill the panel width (#155).
 fn type_sections(app: &mut PhotocraftApp, ui: &mut egui::Ui, character: bool, paragraph: bool, show_defaults: bool) {
+    if crate::direction::is_rtl() {
+        // The dock shell draws its panels with `top_down(Align::Min)`, where the nested rows stay
+        // left-to-right even under the direction flag; this scope mirrors them once.
+        ui.with_layout(crate::direction::body_layout(), |ui| type_sections_body(app, ui, character, paragraph, show_defaults));
+    } else {
+        type_sections_body(app, ui, character, paragraph, show_defaults);
+    }
+}
+
+fn type_sections_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, character: bool, paragraph: bool, show_defaults: bool) {
     use crate::props_layout::{COL_GAP, LABEL_GAP, LABEL_W, field_width, section};
     use crate::theme::ROW_GAP;
     let Some((c, para)) = styles_at(app).or_else(|| show_defaults.then(|| default_styles(app))) else { return };
@@ -314,7 +324,8 @@ fn type_sections(app: &mut PhotocraftApp, ui: &mut egui::Ui, character: bool, pa
                 let g = ui.painter().layout_no_wrap(tl!("Color").into(), egui::FontId::proportional(12.0), t.text_dim);
                 let lw = g.size().x.max(LABEL_W);
                 let (lr, _) = ui.allocate_exact_size(egui::vec2(lw, 22.0), egui::Sense::hover());
-                ui.painter().galley(egui::pos2(lr.left(), lr.center().y - g.size().y / 2.0), g, t.text_dim);
+                let lx = if crate::direction::is_rtl() { lr.right() - g.size().x } else { lr.left() };
+                ui.painter().galley(egui::pos2(lx, lr.center().y - g.size().y / 2.0), g, t.text_dim);
                 let rgb = c.color.to_rgb();
                 let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
                 let sw = (LABEL_W + LABEL_GAP + w - lw - LABEL_GAP).max(24.0);
@@ -474,6 +485,15 @@ fn type_sections(app: &mut PhotocraftApp, ui: &mut egui::Ui, character: bool, pa
 
 /// Type Options: anti-aliasing and orientation of the whole layer (the Type menu's commands).
 fn type_options(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
+    if crate::direction::is_rtl() {
+        // The same body scope as `type_sections`: its nested rows mirror once.
+        ui.with_layout(crate::direction::body_layout(), |ui| type_options_body(app, ui));
+    } else {
+        type_options_body(app, ui);
+    }
+}
+
+fn type_options_body(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     use crate::props_layout::{COL_GAP, LABEL_GAP};
     let Some((layer, _)) = target(app) else { return };
     let Some((aa, vertical)) = app
@@ -536,5 +556,77 @@ fn type_options(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     {
         app.ui.status = e;
         app.ui.status_error = true;
+    }
+}
+
+#[cfg(test)]
+mod rtl_tests {
+    use super::*;
+    use crate::direction::{Dir, direction_scope};
+    use egui::accesskit::Role;
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::{NodeT, Queryable};
+
+    /// The tip the Leading field carries: its accessible name.
+    const LEADING: &str = "Leading (set to the font size × auto-leading when Auto)";
+
+    fn app_with_type() -> PhotocraftApp {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.run("file.new", json!({"width": 800, "height": 600})).unwrap();
+        let id = app.run("type.create", json!({"text": "Ag", "size": 24})).unwrap()["layer"].as_u64().unwrap();
+        app.run("layer.select", json!({"layer": id})).unwrap();
+        app.sync_views();
+        app
+    }
+
+    /// The Character panel as drawn in `dir`.
+    fn panel(dir: Dir) -> Harness<'static, PhotocraftApp> {
+        let _dir = direction_scope(dir);
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(340.0, 700.0))
+            .with_max_steps(8)
+            .build_ui_state(
+                move |ui, app: &mut PhotocraftApp| {
+                    // The fonts are installed after the harness is built: the first frame has
+                    // none, and the panel's captions would panic without them.
+                    if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                        character_panel(app, ui, false);
+                    }
+                },
+                app_with_type(),
+            );
+        PhotocraftApp::setup_context(&h.ctx, Default::default());
+        h.run_steps(4);
+        h
+    }
+
+    /// The caption (the short glyph) of the field named `name`.
+    fn caption(h: &Harness<'_, PhotocraftApp>, name: &str) -> egui::Rect {
+        h.query_all(egui_kittest::kittest::by().label(name).include_labels())
+            .find(|n| n.accesskit_node().role() == Role::Label)
+            .unwrap_or_else(|| panic!("the {name} caption"))
+            .rect()
+    }
+
+    /// The Character panel's rows read from the right in a right-to-left UI: the size field
+    /// leads its row and its caption leads the field.
+    #[test]
+    fn character_panel_rows_follow_reading_order() {
+        let ltr = panel(Dir::Ltr);
+        let rtl = panel(Dir::Rtl);
+        assert!(
+            ltr.ctx.fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))),
+            "the bundled fonts are installed, so the panel drew its captions"
+        );
+
+        let ltr_size = ltr.get_by_role_and_label(Role::SpinButton, "Font size").rect();
+        let ltr_lead = ltr.get_by_role_and_label(Role::SpinButton, LEADING).rect();
+        assert!(ltr_size.left() < ltr_lead.left(), "LTR: the size field comes first: {ltr_size:?} {ltr_lead:?}");
+        assert!(caption(&ltr, "Font size").left() < ltr_size.left(), "LTR: the caption leads its field");
+
+        let rtl_size = rtl.get_by_role_and_label(Role::SpinButton, "Font size").rect();
+        let rtl_lead = rtl.get_by_role_and_label(Role::SpinButton, LEADING).rect();
+        assert!(rtl_size.left() > rtl_lead.left(), "RTL: the size field comes first, at the right: {rtl_size:?} {rtl_lead:?}");
+        assert!(caption(&rtl, "Font size").left() > rtl_size.left(), "RTL: the caption leads its field, at the right");
     }
 }
