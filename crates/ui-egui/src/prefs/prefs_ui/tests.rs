@@ -2411,7 +2411,10 @@ fn rtl_prefs_bool_row_sits_at_the_reading_start() {
     h.run_steps(4);
     let checkbox = h.query_all_by_role_and_label(Role::CheckBox, "Beep when done").next().expect("the Beep when done checkbox").rect();
     let label = h.query_all_by_role_and_label(Role::Label, "Image interpolation").next().expect("the Image interpolation label").rect();
-    assert!((checkbox.right() - label.right()).abs() < 1.0, "the checkbox shares the labels' reading-start edge: {checkbox:?} {label:?}");
+    // The named node is the checkbox's text; its 14 px box and the 6 px gap sit between the
+    // text and the cell's reading-start edge, which the labels share.
+    let gap = label.right() - checkbox.right();
+    assert!((gap - 20.0).abs() < 1.0, "the checkbox box hugs the labels' reading-start edge: {checkbox:?} {label:?}");
 }
 
 /// The left-to-right twin: the checkbox keeps its place in the editor column, after the label
