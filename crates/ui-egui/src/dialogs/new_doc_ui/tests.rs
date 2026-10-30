@@ -902,4 +902,30 @@ mod dialog {
             );
         }
     }
+
+    /// The dialog mirrors like Photoshop's Arabic New Document: Preset Details LEFT, presets RIGHT,
+    /// tabs and cards reading right-to-left — and LTR stays as today.
+    #[test]
+    fn the_new_document_dialog_mirrors_in_rtl_and_stays_ltr_in_ltr() {
+        let _lang = crate::i18n::language_scope(crate::i18n::Lang::EN);
+        for (dir, rtl) in [(crate::i18n::Dir::Ltr, false), (crate::i18n::Dir::Rtl, true)] {
+            let _dir = crate::text::direction::direction_scope(dir);
+            let mut h = harness();
+            let details = h.get_by_label("PRESET DETAILS").rect();
+            let presets = h.get_by_label_contains("BLANK DOCUMENT PRESETS").rect();
+            assert_eq!(details.left() < presets.left(), rtl, "{dir:?}: details column side");
+            let (recent, saved) = (h.get_by_label("Recent").rect(), h.get_by_label("Saved").rect());
+            assert_eq!(recent.center().x > saved.center().x, rtl, "{dir:?}: tab order");
+            let first = preset_title_at(&h, "Default PhotoCraft Size");
+            let second = preset_title_at(&h, "HDTV 1080p");
+            assert_eq!(first.x > second.x, rtl, "{dir:?}: card order");
+            let width = field(&h, 0);
+            let units = h.get_by_label("Units").rect();
+            assert_eq!(width.right() > units.left(), rtl, "{dir:?}: field at the row's reading start");
+            // The mirrored dialog still works end to end.
+            click_at(&mut h, first);
+            enter(&mut h);
+            assert_eq!(created(&h), (2100, 1500, 300.0));
+        }
+    }
 }
