@@ -849,9 +849,11 @@ fn preset_fields(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String,
 pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     let t = Tokens::get(ui.ctx());
     let Some(doc) = app.session.active().map(|s| s.doc.clone()) else { return };
-    ui.horizontal_top(|ui| {
-        // Left: settings.
-        ui.vertical(|ui| {
+    // The dialog host leaves the body on the default layout, so the body mirrors itself: in a
+    // right-to-left UI the panes swap sides and the rows inside them read from the right.
+    crate::direction::dialog_row(ui, |ui| {
+        // Settings, at the reading start.
+        ui.scope_builder(egui::UiBuilder::new().layout(crate::direction::body_layout()), |ui| {
             ui.set_width(248.0);
             ui.label(egui::RichText::new(tl!("File Settings")).font(crate::theme::semibold(12.0)).color(t.text));
             ui.horizontal(|ui| {
@@ -924,8 +926,8 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
             preset_fields(app, ui, f, bw, bh);
         });
         ui.add_space(12.0);
-        // Right: preview + estimated size.
-        ui.vertical(|ui| {
+        // Preview + estimated size, at the reading end.
+        ui.scope_builder(egui::UiBuilder::new().layout(crate::direction::body_layout()), |ui| {
             let layer = f.get("__layer").and_then(Value::as_u64);
             let key = egui::Id::unique(("export-preview", doc.id.0, app.session.active().map_or(0, |s| s.revision), layer));
             let sig = format!(
@@ -1118,5 +1120,7 @@ fn quick_export(app: &mut PhotocraftApp, p: Value) -> Result<Value, String> {
     Ok(r)
 }
 
+#[cfg(test)]
+mod rtl_tests;
 #[cfg(test)]
 mod tests;
