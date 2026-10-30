@@ -448,8 +448,8 @@ mod tests {
     /// and its shortcut detail at the left (LTR: label left, detail right), on the same rows.
     #[test]
     fn hit_rows_mirror_under_rtl() {
-        /// The label and detail text rects of the painted palette rows, paired row by row. The
-        /// two are told apart by their font size: labels are 13-pt medium, details 11.5-pt.
+        /// The label and detail text rects of the painted palette rows, paired row by row:
+        /// labels are 13-pt medium, details 11.5-pt, and a row's two share their center y.
         fn rows(rtl: bool) -> Vec<(egui::Rect, egui::Rect)> {
             let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
             let ctx = egui::Context::default();
@@ -460,20 +460,34 @@ mod tests {
             app.ui.palette_open = true;
             let dir = if rtl { crate::direction::Dir::Rtl } else { crate::direction::Dir::Ltr };
             let _scope = crate::direction::direction_scope(dir);
+            // The area's first frame is a sizing pass that paints nothing; classify the second.
             let mut out = ctx.run_ui(Default::default(), |ui| super::show(&mut app, ui.ctx()));
             out.textures_delta.clear();
-            let (mut labels, mut details) = (Vec::new(), Vec::new());
+            let mut out = ctx.run_ui(Default::default(), |ui| super::show(&mut app, ui.ctx()));
+            out.textures_delta.clear();
+            // The galley's layout rect (not the glyph mesh bounds) is what the anchor aligns,
+            // so its center is exactly the anchor point for *_CENTER aligns.
+            let layout_rect = |t: &egui::epaint::TextShape| t.galley.rect.translate(t.pos.to_vec2());
+            let mut texts: Vec<(egui::Rect, f32)> = Vec::new();
             for shape in &out.shapes {
                 if let egui::Shape::Text(text) = &shape.shape {
                     let size = text.galley.job.sections.first().map_or(0.0, |s| s.format.font_id.size);
-                    if size == 13.0 {
-                        labels.push(text.visual_bounding_rect());
-                    } else if size == 11.5 {
-                        details.push(text.visual_bounding_rect());
+                    if size == 13.0 || size == 11.5 {
+                        texts.push((layout_rect(text), size));
                     }
                 }
             }
-            labels.into_iter().zip(details).collect()
+            // Pair each detail (11.5-pt) with the label (13-pt) on the same row (same center y);
+            // other 13-pt text in the card (the hint, the warning icon) has no detail beside it.
+            let mut rows = Vec::new();
+            for (rect, size) in &texts {
+                if *size == 11.5 {
+                    if let Some((label, _)) = texts.iter().find(|(r, s)| *s == 13.0 && (r.center().y - rect.center().y).abs() < 1.0) {
+                        rows.push((*label, *rect));
+                    }
+                }
+            }
+            rows
         }
         let ltr = rows(false);
         let rtl = rows(true);
@@ -481,7 +495,10 @@ mod tests {
         assert_eq!(rtl.len(), ltr.len(), "the palette paints the same hit list in RTL");
         for (i, ((l_label, l_detail), (r_label, r_detail))) in ltr.iter().zip(&rtl).enumerate() {
             assert!((l_label.center().y - r_label.center().y).abs() < 0.5, "row {i} keeps its place in both directions");
-            assert!((l_label.center().y - l_detail.center().y).abs() < 1.0, "row {i}'s label and detail share the row");
+            assert!(
+                (l_label.center().y - l_detail.center().y).abs() < 1.0,
+                "row {i}'s label and detail share the row: label={l_label:?} detail={l_detail:?}"
+            );
             assert!(l_label.right() < l_detail.left(), "LTR: row {i}'s label sits left of its detail");
             assert!(r_label.left() > r_detail.right(), "RTL: row {i}'s label sits right of its detail");
         }
@@ -513,27 +530,4 @@ mod tests {
         assert_eq!(rtl, ltr, "the palette keeps its place in both directions");
     }
 
-    #[test]
-    fn debug_palette_shapes() {
-        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
-        let ctx = egui::Context::default();
-        crate::theme::install_fonts(&ctx);
-        let mut warmup = ctx.run_ui(Default::default(), |_| {});
-        warmup.textures_delta.clear();
-        app.ui.palette_open = true;
-        let mut out = ctx.run_ui(Default::default(), |ui| super::show(&mut app, ui.ctx()));
-        out.textures_delta.clear();
-        eprintln!("content_rect={:?} shapes={}", ctx.content_rect(), out.shapes.len());
-        for s in &out.shapes {
-            if let egui::Shape::Text(t) = &s.shape {
-                eprintln!(
-                    "TEXT size={} rect={:?} text={:?}",
-                    t.galley.job.sections.first().map_or(-1.0, |s| s.format.font_id.size),
-                    t.visual_bounding_rect(),
-                    t.galley.job.text
-                );
-            }
-        }
-        panic!("debug");
-    }
 }
