@@ -94,6 +94,29 @@ fn layout_gives_the_name_what_the_indicators_leave() {
     assert!(right < rects[3].1.left());
 }
 
+/// The shared label paints nothing when the reading start is at or past the far limit, in both
+/// directions: the right-to-left branch mirrors the left-to-right contract instead of clamping
+/// the anchor and painting outside the row.
+#[test]
+fn a_label_at_or_past_its_limit_paints_nothing() {
+    use crate::direction::{Dir, direction_scope};
+    let ctx = egui::Context::default();
+    let row = Rect::from_min_size(pos2(100.0, 40.0), vec2(300.0, 22.0));
+    let layer = egui::LayerId::new(egui::Order::Middle, egui::Id::unique("layer-row-label"));
+    let font = egui::FontId::proportional(11.5);
+    {
+        let _ltr = direction_scope(Dir::Ltr);
+        let painter = egui::Painter::new(ctx.clone(), layer, row);
+        assert!(super::label(&painter, row.right(), row.center().y, row.right(), "Shadow", font.clone(), egui::Color32::WHITE).is_none());
+    }
+    {
+        let _rtl = direction_scope(Dir::Rtl);
+        let painter = egui::Painter::new(ctx.clone(), layer, row);
+        assert!(super::label(&painter, row.left(), row.center().y, row.left(), "Shadow", font.clone(), egui::Color32::WHITE).is_none());
+        assert!(super::label(&painter, row.left() - 5.0, row.center().y, row.left(), "Shadow", font, egui::Color32::WHITE).is_none());
+    }
+}
+
 #[test]
 fn long_names_never_run_under_the_indicators() {
     for ppp in [1.0, 1.5, 2.0] {

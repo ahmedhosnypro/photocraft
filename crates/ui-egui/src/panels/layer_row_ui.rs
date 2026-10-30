@@ -1,11 +1,12 @@
-//! Layers panel row: the right-hand indicators and the name between them and the thumbnails
-//! (#144).
+//! Layers panel row: the indicators and the name between them and the thumbnails (#144).
 //!
 //! The indicators (lock, fx badge with its effects triangle, link, the blend-mode label) are
-//! laid out first, from the row's right edge inward; the name gets the width that is left and
-//! is cut with an ellipsis, so a long name never runs under an indicator at any panel width or
-//! UI scale. The blend-mode label is optional: it is dropped before the name gets too narrow.
-//! The rects drawn each frame are recorded ([`recorded`]) for tests and automation.
+//! laid out first, from the row's reading-start edge (the right edge in a left-to-right UI,
+//! the left edge in a right-to-left one, where the overlay scrollbar also moves); the name
+//! gets the width that is left and is cut with an ellipsis, so a long name never runs under an
+//! indicator at any panel width or UI scale. The blend-mode label is optional: it is dropped
+//! before the name gets too narrow. The rects drawn each frame are recorded ([`recorded`]) for
+//! tests and automation.
 
 use egui::{Align2, FontId, Galley, Painter, Pos2, Rect, Sense, Shape, Stroke, pos2, vec2};
 use photocraft_color::BlendMode;
@@ -16,8 +17,26 @@ use std::sync::Arc;
 use crate::icons;
 use crate::theme::{self, Tokens};
 
-/// Space kept free at a row's right edge: the overlay scrollbar sits there.
+/// Space kept free at a row's pad edge: the overlay scrollbar sits there (right in a
+/// left-to-right UI, left in a right-to-left one).
 pub const RIGHT_PAD: f32 = 10.0;
+
+/// The x where a row's indicators start packing: `row.right() - RIGHT_PAD`, or
+/// `row.left() + RIGHT_PAD` in a right-to-left UI, where the scrollbar moves to the left.
+pub fn pad_edge(row: Rect) -> f32 {
+    if crate::direction::is_rtl() { row.left() + RIGHT_PAD } else { row.right() - RIGHT_PAD }
+}
+
+/// +1 left-to-right, −1 right-to-left: the signed x-step for hand-painted row geometry.
+pub fn step() -> f32 {
+    if crate::direction::is_rtl() { -1.0 } else { 1.0 }
+}
+
+/// The reading-start x for content offset `off` from the row's start edge.
+pub fn start_x(row: Rect, off: f32) -> f32 {
+    if crate::direction::is_rtl() { row.right() - off } else { row.left() + off }
+}
+
 /// Gap between indicators, and between the name and the first indicator.
 const GAP: f32 = 4.0;
 /// Width of an icon indicator (lock, link).
@@ -52,25 +71,33 @@ pub struct RowRects {
     pub indicators: Vec<(Indicator, Rect)>,
 }
 
-/// Lay out `items` (right to left, with their widths; `Blend` is optional) inside `row`,
-/// leaving the name the span from `name_left`. Returns the indicator rects and the name's
-/// right limit.
-pub fn layout(row: Rect, name_left: f32, items: &[(Indicator, f32)]) -> (Vec<(Indicator, Rect)>, f32) {
-    let mut right = row.right() - RIGHT_PAD;
+/// Lay out `items` in reading order inside `row` — packed from the row's right edge in a
+/// left-to-right UI, from its left edge in a right-to-left one — leaving the name the span
+/// from `name_anchor` (where the name starts, in reading order) to the returned limit. `Blend`
+/// is optional: it is dropped before the name gets too narrow. Returns the indicator rects and
+/// the name's far limit.
+pub fn layout(row: Rect, name_anchor: f32, items: &[(Indicator, f32)]) -> (Vec<(Indicator, Rect)>, f32) {
+    let rtl = crate::direction::is_rtl();
+    // The indicators pack from the pad edge toward the name, against the reading direction.
+    let dir = -step();
+    let mut cursor = pad_edge(row);
     let mut out = Vec::with_capacity(items.len());
     for &(kind, w) in items {
         let w = w.max(0.0);
         // The fx badge hugs its triangle; everything else keeps a gap.
         let gap = if kind == Indicator::Fx && out.last().is_some_and(|(k, _)| *k == Indicator::FxTriangle) { 1.0 } else { GAP };
-        let left = right - w;
-        if kind == Indicator::Blend && left - GAP - name_left < MIN_NAME_W {
+        let far = cursor + dir * w;
+        // The edge of this item that faces the name.
+        let near = cursor.min(far) + dir * gap;
+        let room = if rtl { name_anchor - near } else { near - name_anchor };
+        if kind == Indicator::Blend && room < MIN_NAME_W {
             continue;
         }
-        out.push((kind, Rect::from_min_max(pos2(left, row.top()), pos2(right, row.bottom()))));
-        right = left - gap;
+        out.push((kind, Rect::from_min_max(pos2(cursor.min(far), row.top()), pos2(cursor.max(far), row.bottom()))));
+        cursor = far + dir * gap;
     }
-    let name_right = out.last().map_or(right, |(_, r)| r.left() - GAP);
-    (out, name_right)
+    let name_limit = out.last().map_or(cursor, |(_, r)| if rtl { r.right() + GAP } else { r.left() - GAP });
+    (out, name_limit)
 }
 
 /// The PSD key of the adjustment `l` holds when PhotoCraft keeps it as imported but cannot
@@ -82,7 +109,7 @@ pub fn unsupported_key(l: &Layer) -> Option<&str> {
     }
 }
 
-/// Width the always-shown indicators of `l` take at the row's right (blend label excluded).
+/// Width the always-shown indicators of `l` take at the row's pad edge (blend label excluded).
 pub fn reserved_width(l: &Layer) -> f32 {
     let mut w = RIGHT_PAD;
     if unsupported_key(l).is_some() {
@@ -137,14 +164,15 @@ pub fn truncated(painter: &Painter, text: &str, font: FontId, color: egui::Color
     Some(layout(text, true))
 }
 
-/// Paint `l`'s right-hand indicators in `row` and handle the effects triangle. Returns the
-/// name's right limit, the indicator rects, and whether the triangle was clicked this frame (so
-/// the row doesn't also treat the click as a selection).
+/// Paint `l`'s indicators in `row` (packed from the reading-start edge) and handle the effects
+/// triangle. `name_anchor` is where the name starts in reading order. Returns the name's far
+/// limit, the indicator rects, and whether the triangle was clicked this frame (so the row
+/// doesn't also treat the click as a selection).
 pub fn indicators(
     ui: &egui::Ui,
     painter: &Painter,
     row: Rect,
-    name_left: f32,
+    name_anchor: f32,
     l: &Layer,
     fx_open: bool,
     actions: &mut Vec<(String, Value)>,
@@ -181,7 +209,7 @@ pub fn indicators(
     if let Some(g) = &blend_galley {
         items.push((Indicator::Blend, g.size().x));
     }
-    let (rects, name_right) = layout(row, name_left, &items);
+    let (rects, name_limit) = layout(row, name_anchor, &items);
     let mut clicked = false;
     let cy = row.center().y;
     for &(kind, r) in &rects {
@@ -232,31 +260,56 @@ pub fn indicators(
             }
         }
     }
-    (name_right, rects, clicked)
+    (name_limit, rects, clicked)
 }
 
-/// A small disclosure triangle: pointing down when open, right when closed.
+/// A small disclosure triangle: pointing down when open, right when closed (left in a
+/// right-to-left UI).
 pub fn paint_triangle(painter: &Painter, c: Pos2, open: bool, color: egui::Color32) {
     let s = 3.0;
+    // A painted polygon, not an icon: the flip is local to this triangle.
+    let sgn = if crate::direction::is_rtl() { -1.0 } else { 1.0 };
     let pts = if open {
         vec![pos2(c.x - s, c.y - s * 0.6), pos2(c.x + s, c.y - s * 0.6), pos2(c.x, c.y + s * 0.6)]
     } else {
-        vec![pos2(c.x - s * 0.6, c.y - s), pos2(c.x + s * 0.6, c.y), pos2(c.x - s * 0.6, c.y + s)]
+        vec![pos2(c.x - sgn * s * 0.6, c.y - s), pos2(c.x + sgn * s * 0.6, c.y), pos2(c.x - sgn * s * 0.6, c.y + s)]
     };
     painter.add(Shape::convex_polygon(pts, color, Stroke::NONE));
 }
 
-/// Paint `text` left-aligned at `x`, vertically centred on `cy`, cut to end before `right`.
-/// Returns the painted rect.
+/// Paint `text` at the reading start of the span from `x` to `right`, vertically centred on
+/// `cy`, cut to fit the span: left-aligned at `x` in a left-to-right UI, right-aligned at the
+/// span's right end in a right-to-left one. Returns the painted rect.
 pub fn label(painter: &Painter, x: f32, cy: f32, right: f32, text: &str, font: FontId, color: egui::Color32) -> Option<Rect> {
-    let g = truncated(painter, text, font, color, false, right - x)?;
-    let r = Align2::LEFT_CENTER.anchor_size(pos2(x, cy), g.size());
-    painter.galley(r.min, g, color);
-    Some(r)
+    if crate::direction::is_rtl() {
+        if x <= right {
+            return None;
+        }
+        let g = truncated(painter, text, font, color, false, x - right)?;
+        let r = Align2::RIGHT_CENTER.anchor_size(pos2(x, cy), g.size());
+        painter.galley(r.min, g, color);
+        Some(r)
+    } else {
+        let g = truncated(painter, text, font, color, false, right - x)?;
+        let r = Align2::LEFT_CENTER.anchor_size(pos2(x, cy), g.size());
+        painter.galley(r.min, g, color);
+        Some(r)
+    }
 }
 
 /// Photoshop-style Layers flyout commands. The dock owns tab-group controls, not this menu.
 pub fn panel_menu(app: &mut crate::PhotocraftApp, ui: &mut egui::Ui) {
+    if crate::direction::is_rtl() {
+        // Mirror the menu body; a left-to-right UI keeps egui's own layout.
+        let max_rect = ui.max_rect();
+        ui.scope_builder(egui::UiBuilder::new().max_rect(max_rect).layout(crate::direction::body_layout()), |ui| panel_menu_body(app, ui));
+    } else {
+        panel_menu_body(app, ui);
+    }
+}
+
+/// The flyout's commands.
+fn panel_menu_body(app: &mut crate::PhotocraftApp, ui: &mut egui::Ui) {
     use crate::layers_panel_ui::run_menu_command;
     use crate::state::LayersPanelDialog;
 
