@@ -356,17 +356,13 @@ fn dialog_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, d: &Dialog, fields: &
             let mut chosen = tab;
             // The strip reads from the right in a right-to-left UI (`ui.horizontal` mirrors only
             // under a mirrored parent layout, which this dialog no longer has).
-            ui.allocate_ui_with_layout(
-                egui::vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y),
-                crate::text::direction::row(),
-                |ui| {
-                    for (key, label) in [("about", tl!("About")), ("contributors", tl!("Contributors")), ("models", tl!("Models"))] {
-                        if crate::widgets::pill_tab(ui, label, tab == key).clicked() {
-                            chosen = key;
-                        }
+            ui.allocate_ui_with_layout(egui::vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y), crate::text::direction::row(), |ui| {
+                for (key, label) in [("about", tl!("About")), ("contributors", tl!("Contributors")), ("models", tl!("Models"))] {
+                    if crate::widgets::pill_tab(ui, label, tab == key).clicked() {
+                        chosen = key;
                     }
-                },
-            );
+                }
+            });
             if chosen != tab {
                 fields.insert("tab".into(), json!(chosen));
             }
@@ -645,9 +641,7 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
             } else if rtl {
                 // The title reads from the right: the mirrored body layout right-places the label,
                 // and the galley with it (labels align by their layout's horizontal placement).
-                ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 22.0), crate::text::direction::body_layout(), |ui| ui.add(label))
-                    .inner
-                    .rect
+                ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 22.0), crate::text::direction::body_layout(), |ui| ui.add(label)).inner.rect
             } else {
                 ui.add(label).rect
             };
@@ -698,8 +692,7 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 // The group hugs the row's reading end: the right edge in LTR, the left in RTL.
                 ui.with_layout(crate::text::direction::trailing_min(), |ui| {
                     ui.spacing_mut().item_spacing.x = 10.0;
-                    let (done, apply) =
-                        button_row(app, ui, &d, &mut fields, id, interactive, web && (web_popup_open || egui::Popup::is_any_open(ui.ctx())));
+                    let (done, apply) = button_row(app, ui, &d, &mut fields, id, interactive, web && (web_popup_open || egui::Popup::is_any_open(ui.ctx())));
                     outcome = done.or(outcome);
                     apply_requested |= apply;
                 });
