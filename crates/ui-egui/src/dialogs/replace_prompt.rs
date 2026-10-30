@@ -62,12 +62,10 @@ mod tests {
         fields.insert("message".into(), json!("Replace it?"));
         fields.insert("detail".into(), json!("The name in the save dialog changed."));
         let area = std::cell::Cell::new(egui::Rect::ZERO);
-        let mut h = egui_kittest::Harness::builder()
-            .with_size(egui::vec2(400.0, 200.0))
-            .build_ui(|ui| {
-                area.set(ui.max_rect());
-                body(ui, &fields);
-            });
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(400.0, 200.0)).build_ui(|ui| {
+            area.set(ui.max_rect());
+            body(ui, &fields);
+        });
         h.run();
         (h.get_by_label("Replace it?").rect(), h.get_by_label("The name in the save dialog changed.").rect(), area.get())
     }
