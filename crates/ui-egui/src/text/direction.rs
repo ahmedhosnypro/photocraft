@@ -1,14 +1,25 @@
-//! Right-to-left shell layout (Arabic, Hebrew, Persian, Urdu).
+//! Right-to-left layout (Arabic, Hebrew, Persian, Urdu).
 //!
 //! The direction follows the UI language ([`crate::i18n::Lang::dir`]). In a right-to-left
-//! language the window's chrome mirrors, as in right-to-left macOS and Windows apps: the menu
-//! bar starts at the right, the toolbox docks on the right, the panel dock and its rail on the
-//! left, and the title and status bars read from the right. Panel interiors, dialogs, document
-//! tabs and the canvas keep their left-to-right layout for now (`docs/localization-parity.md`).
+//! language the UI mirrors, as in right-to-left macOS and Windows apps: the menu bar starts at
+//! the right, the toolbox docks on the right, the dock and its rail on the left, and the title
+//! and status bars read from the right. Dialogs, floating windows, docked panel interiors,
+//! menus, popups and document tabs mirror too; the canvas itself stays left-to-right
+//! (Photoshop-like), as does numeric text inside mirrored rows.
 //!
-//! egui has no global direction, so call sites choose sides and rows through these helpers.
-//! Rows nested in a [`row`] follow it on their own: egui starts a `ui.horizontal*` row from the
-//! right when its parent layout runs right-to-left.
+//! Two mechanisms work together:
+//! - the egui fork's `Style::right_to_left` flag ([`crate::theme::set_direction`], called from
+//!   [`crate::theme::apply`] and on language changes from `i18n::sync_context`) mirrors every
+//!   egui-owned widget: submenus and popups open reading-end first, vertical scrollbars sit on
+//!   the left, collapsing-header triangles point left, checkbox/radio icons swap sides, and
+//!   window title bars put the close button on the left; and
+//! - these helpers mirror what egui does not: row and column order for explicit layouts, side
+//!   panels, and hand-painted geometry. A nested `ui.horizontal` under a [`body_layout`] or
+//!   [`row`] parent follows the row's direction on its own.
+//!
+//! Mirror each surface exactly once: the flag, a [`body_layout`] scope and an explicit
+//! [`row`]/[`trailing`] pin each flip a row — never combine two on the same row. Pointer
+//! semantics (scrub drags, slider value→x mapping) stay physical.
 //!
 //! `PHOTOCRAFT_UI_DIRECTION=rtl` (or `ltr`) forces a direction whatever the language, so the
 //! mirrored layout can be checked before a right-to-left catalog is installed. It is read once
@@ -98,6 +109,87 @@ pub fn horizontal_centered<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)
 /// The popup alignment for a menu opening below its button: under its reading-start edge.
 pub fn below() -> egui::RectAlign {
     if is_rtl() { egui::RectAlign::BOTTOM_END } else { egui::RectAlign::BOTTOM_START }
+}
+
+/// The body layout for dialogs and window bodies: in a right-to-left UI blocks right-align and
+/// their nested `ui.horizontal` rows mirror; in a left-to-right UI it is egui's default.
+///
+/// egui mirrors a nested row only when the parent layout runs right-to-left, or is vertical with
+/// `Align::Max` cross alignment; a `top_down(Align::Min)` body keeps every nested row
+/// left-to-right even with the direction flag set, so mirrored bodies scope themselves with this.
+pub fn body_layout() -> Layout {
+    if is_rtl() { Layout::top_down(Align::Max) } else { Layout::top_down(Align::Min) }
+}
+
+/// A row hugging the reading end with top-aligned items: the footer shape for window and dialog
+/// bodies ([`trailing`] centres its items).
+pub fn trailing_min() -> Layout {
+    if is_rtl() { Layout::left_to_right(Align::Min) } else { Layout::right_to_left(Align::Min) }
+}
+
+/// A full-width row in reading order for bodies that stay `top_down(Align::Min)`:
+/// [`horizontal_centered`] without the vertical centring. Rows inside a [`body_layout`] parent
+/// already mirror; opt in here only where that scope does not reach.
+pub fn dialog_row<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> egui::InnerResponse<R> {
+    let size = ui.available_size_before_wrap();
+    ui.allocate_ui_with_layout(size, row_min(), add)
+}
+
+/// [`row`] with top-aligned items, for rows inside a vertical body.
+fn row_min() -> Layout {
+    if is_rtl() { Layout::right_to_left(Align::Min) } else { Layout::left_to_right(Align::Min) }
+}
+
+/// The horizontal keys meaning "next on screen" and "previous on screen":
+/// `(ArrowRight, ArrowLeft)` left-to-right, swapped in a right-to-left UI. Menu-bar navigation
+/// uses one tuple so the open-menu and bar-focus key machines cannot diverge.
+pub fn horizontal_nav_keys() -> (egui::Key, egui::Key) {
+    if is_rtl() { (egui::Key::ArrowLeft, egui::Key::ArrowRight) } else { (egui::Key::ArrowRight, egui::Key::ArrowLeft) }
+}
+
+/// Wrap a floating window's (or dialog's) content: in a right-to-left UI the body's blocks
+/// right-align and its nested rows mirror; in a left-to-right UI the content draws unchanged.
+/// Call once at the top of each `egui::Window` body closure.
+pub fn window_body<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> egui::InnerResponse<R> {
+    if is_rtl() {
+        ui.with_layout(body_layout(), add)
+    } else {
+        let inner = add(ui);
+        egui::InnerResponse::new(inner, ui.response())
+    }
+}
+
+/// Two `egui::Grid` cells in reading order — label then editor left-to-right, editor then label
+/// right-to-left. `egui::Grid` ignores the direction flag, so the column order is emitted
+/// manually. Call once per row; end the row with `ui.end_row()` as usual.
+pub fn grid_cells<L, E>(ui: &mut egui::Ui, label: L, editor: E)
+where
+    L: FnOnce(&mut egui::Ui),
+    E: FnOnce(&mut egui::Ui),
+{
+    if is_rtl() {
+        editor(ui);
+        label(ui);
+    } else {
+        label(ui);
+        editor(ui);
+    }
+}
+
+/// One settings row without a `Grid`: the label occupies `label_w` at the reading start and the
+/// editor follows toward the reading end — the mirrored shape of a two-column settings grid.
+/// `label_w = 0.0` lets a bare checkbox hug the reading start.
+pub fn settings_row<L, E>(ui: &mut egui::Ui, label_w: f32, label: L, editor: E)
+where
+    L: FnOnce(&mut egui::Ui),
+    E: FnOnce(&mut egui::Ui),
+{
+    let width = ui.available_width();
+    ui.allocate_ui_with_layout(egui::vec2(width, 0.0), row(), |ui| {
+        ui.allocate_ui_with_layout(egui::vec2(label_w, 0.0), row(), |ui| label(ui));
+        editor(ui);
+        ui.add_space(7.0);
+    });
 }
 
 #[cfg(test)]

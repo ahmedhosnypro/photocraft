@@ -194,6 +194,24 @@ fn ukrainian_plural_rule_handles_teens_and_compound_counts() {
     assert_eq!(forms, [2, 0, 1, 1, 2, 2, 2, 2, 2, 0, 1, 1, 2, 2, 0, 2, 2, 2, 0, 1, 2]);
 }
 
+/// Right-to-left scripts are decided by the primary subtag, any case and either separator;
+/// everything else reads left to right (`dir_for_code`). Arabic is the one right-to-left
+/// catalog; every other registered language stays left to right.
+#[test]
+fn dir_for_code_follows_the_primary_subtag() {
+    for code in ["ar", "AR", "ar-eg", "ar-SA", "fa", "fa_IR", "fa-IR", "he", "he-IL", "ur", "ur-PK", "ps", "ckb", "sd", "ug", "yi", "dv"] {
+        assert_eq!(dir_for_code(code), Dir::Rtl, "{code}");
+    }
+    // `ku` alone is Kurmanji, written in Latin script; Sorani is `ckb`.
+    for code in ["en", "en-US", "en_US", "ja", "ja-JP", "zh-hans", "zh-TW", "pt-br", "pt-BR", "de", "ku", "arn", ""] {
+        assert_eq!(dir_for_code(code), Dir::Ltr, "{code}");
+    }
+    for lang in Lang::all() {
+        let want = if lang.code() == "ar" { Dir::Rtl } else { Dir::Ltr };
+        assert_eq!(lang.dir(), want, "{}", lang.code());
+    }
+}
+
 #[test]
 fn arabic_resolves_locales_and_preferences() {
     let ar = Lang::from_code("ar").expect("ar registered");
@@ -224,6 +242,35 @@ fn arabic_preset_import_results_are_translated() {
     assert_eq!(trn(ar, 3, "Imported {n} pattern from {file}", "Imported {n} patterns from {file}"), "تم استيراد 3 نقشات من {file}");
     assert_eq!(trn(ar, 2, "Imported {n} gradient from {file}", "Imported {n} gradients from {file}"), "تم استيراد 2 تدرجين من {file}");
     assert_eq!(trn(ar, 1, "Imported {n} brush from {file}", "Imported {n} brushes from {file}"), "تم استيراد 1 فرشاة من {file}");
+}
+
+/// The `tl!` literals of the Select-and-Mask workspace (#10173), plus the type panel's
+/// `Baseline`, have an Arabic row: a missing key would leave an English string in the
+/// mirrored UI.
+#[test]
+fn arabic_translates_the_select_and_mask_strings() {
+    let ar = Lang::from_code("ar").expect("ar registered");
+    for key in [
+        "View Mode",
+        "Refine Mode",
+        "Real-Time Refinement",
+        "Global Refinements",
+        "Refine Hair",
+        "Refine Hair needs hair detection, which isn't available yet",
+        "Object Aware",
+        "Object Aware needs a segmentation model, which isn't available yet",
+        "Edge Detection",
+        "Color Aware",
+        "Decontaminate Colors",
+        "High Quality Preview",
+        "Baseline",
+        "Clear Selection",
+        "Refine Edge Brush Tool",
+        "Select and Mask was closed: another layer was selected",
+        "Select and Mask was closed: its document is no longer the active one",
+    ] {
+        assert!(has(ar, key), "{key}");
+    }
 }
 
 #[test]

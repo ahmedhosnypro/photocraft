@@ -10,7 +10,7 @@
 //!
 //! That is all: the Preferences dropdown, the system-locale match and the catalog tests (parse,
 //! placeholders, plural forms) pick it up from the registry. A right-to-left language (Arabic,
-//! Hebrew, Persian, Urdu, see [`dir_for_code`]) also mirrors the window's chrome
+//! Hebrew, Persian, Urdu, see [`dir_for_code`]) also mirrors the interface
 //! ([`crate::direction`]).
 //!
 //! # Looking strings up
@@ -235,7 +235,7 @@ pub static LANGUAGES: [LangInfo; 23] = [
     // Hindi; `hi`, `hi-IN` locales resolve here.
     LangInfo { code: "hi", name: "हिन्दी", source: catalog!("hi"), plural: plural_one_other, complete_menus: false, catalog: OnceLock::new() },
     // Arabic (Modern Standard); `ar-SA`, `ar-EG` and the other regional locales resolve here. The
-    // chrome mirrors right to left (`dir_for_code`), and egui lays each label out right to left.
+    // interface mirrors right to left (`dir_for_code`), and egui lays each label out right to left.
     LangInfo { code: "ar", name: "العربية", source: catalog!("ar"), plural: plural_arabic, complete_menus: true, catalog: OnceLock::new() },
 ];
 
@@ -429,6 +429,8 @@ pub fn sync_context(ctx: &egui::Context, language: &str) {
     if changed {
         ctx.data_mut(|data| data.insert_temp(id, lang));
         crate::theme::install_fonts(ctx);
+        // The language's direction, in both theme branches, before this frame's repaint.
+        crate::theme::set_direction(ctx, crate::direction::is_rtl());
         ctx.request_repaint();
     }
 }

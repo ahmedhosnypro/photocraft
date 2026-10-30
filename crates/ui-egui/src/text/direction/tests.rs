@@ -9,22 +9,6 @@ use egui_kittest::{Harness, kittest::Queryable};
 use serde_json::json;
 
 #[test]
-fn right_to_left_scripts_by_language_code() {
-    for code in ["ar", "AR", "ar-eg", "fa", "fa_IR", "he", "ur", "ckb", "ps", "yi"] {
-        assert_eq!(i18n::dir_for_code(code), Dir::Rtl, "{code}");
-    }
-    // `ku` alone is Kurmanji, written in Latin script; Sorani is `ckb`.
-    for code in ["en", "ja", "zh-hans", "pt-br", "ku", "arn", ""] {
-        assert_eq!(i18n::dir_for_code(code), Dir::Ltr, "{code}");
-    }
-    // Arabic is the one right-to-left catalog; every other registered language stays left to right.
-    for lang in Lang::all() {
-        let want = if lang.code() == "ar" { Dir::Rtl } else { Dir::Ltr };
-        assert_eq!(lang.dir(), want, "{}", lang.code());
-    }
-}
-
-#[test]
 fn direction_follows_the_language_unless_forced() {
     let _lang = i18n::language_scope(Lang::EN);
     let forced = direction_scope(Dir::Rtl);
@@ -53,12 +37,65 @@ fn sides_and_rows_mirror() {
 }
 
 #[test]
+fn body_and_footer_layouts_mirror() {
+    {
+        let _ltr = direction_scope(Dir::Ltr);
+        assert_eq!(body_layout().main_dir(), egui::Direction::TopDown);
+        assert_eq!(body_layout().cross_align(), Align::Min);
+        assert_eq!(trailing_min().main_dir(), egui::Direction::RightToLeft);
+        assert_eq!(trailing_min().cross_align(), Align::Min);
+        assert_eq!(horizontal_nav_keys(), (egui::Key::ArrowRight, egui::Key::ArrowLeft));
+    }
+    let _rtl = direction_scope(Dir::Rtl);
+    // Vertical + `Align::Max` is what makes egui mirror the nested rows of a body.
+    assert_eq!(body_layout().main_dir(), egui::Direction::TopDown);
+    assert_eq!(body_layout().cross_align(), Align::Max);
+    assert_eq!(trailing_min().main_dir(), egui::Direction::LeftToRight);
+    assert_eq!(trailing_min().cross_align(), Align::Min);
+    assert_eq!(horizontal_nav_keys(), (egui::Key::ArrowLeft, egui::Key::ArrowRight));
+}
+
+#[test]
 fn env_values_parse_strictly() {
     assert_eq!(parse_dir("rtl"), Some(Dir::Rtl));
     assert_eq!(parse_dir(" RTL "), Some(Dir::Rtl));
     assert_eq!(parse_dir("ltr"), Some(Dir::Ltr));
     assert_eq!(parse_dir(""), None);
     assert_eq!(parse_dir("ar"), None);
+}
+
+/// The egui direction flag ([`crate::theme::set_direction`]) must follow the direction scope so
+/// every egui-owned widget (submenus, popups, scrollbars, window chrome) mirrors with it.
+#[test]
+fn right_to_left_flag_follows_direction() {
+    let _lang = i18n::language_scope(Lang::EN);
+    for (dir, want) in [(Dir::Ltr, false), (Dir::Rtl, true)] {
+        let _dir = direction_scope(dir);
+        let h = harness();
+        assert_eq!(h.ctx.global_style().right_to_left, want, "{dir:?}");
+    }
+}
+
+/// A committed language change flips the flag in the same frame (i18n::sync_context), in both
+/// egui theme branches so an appearance switch cannot revert the direction.
+#[test]
+fn the_flag_follows_a_live_language_switch() {
+    let Some(_) = photocraft_text::craft_fonts::CRAFT_FONTS.iter().find(|f| f.family == "Noto Sans Arabic") else {
+        eprintln!("skipping: built without craft-fonts (set CRAFT_FONTS_DIR to a craft-fonts checkout)");
+        return;
+    };
+    let _lang = i18n::language_scope(Lang::EN);
+    let mut h = harness();
+    assert!(!h.ctx.global_style().right_to_left, "English starts left-to-right");
+    h.state_mut().run("prefs.set", json!({"path": "interface.language", "value": "ar"})).expect("language");
+    h.run_steps(4);
+    assert!(h.ctx.global_style().right_to_left, "switching to Arabic flips the flag");
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        assert!(h.ctx.style_of(theme).right_to_left, "{theme:?} branch");
+    }
+    h.state_mut().run("prefs.set", json!({"path": "interface.language", "value": "en"})).expect("language");
+    h.run_steps(4);
+    assert!(!h.ctx.global_style().right_to_left, "switching back restores left-to-right");
 }
 
 fn harness() -> Harness<'static, PhotocraftApp> {
