@@ -811,10 +811,28 @@ fn fx_label_color(enabled: bool, t: &Tokens) -> Color32 {
     if enabled { t.text } else { t.text_dim }
 }
 
-/// Dialog body (left list, right parameters).
-/// The enable checkbox of an effect row.
+/// The enable checkbox of an effect row, at the row's reading-start edge.
 fn fx_checkbox_rect(row: egui::Rect) -> egui::Rect {
-    egui::Rect::from_min_size(row.min + vec2(6.0, 6.0), vec2(14.0, 14.0))
+    let x = if crate::direction::is_rtl() { row.right() - 20.0 } else { row.left() + 6.0 };
+    egui::Rect::from_min_size(egui::pos2(x, row.top() + 6.0), vec2(14.0, 14.0))
+}
+
+/// An effect row's label anchor: past the checkbox, aligned into the row's reading direction.
+fn fx_label_at(row: egui::Rect) -> (egui::Pos2, egui::Align2) {
+    if crate::direction::is_rtl() {
+        (row.right_center() - vec2(28.0, 0.0), egui::Align2::RIGHT_CENTER)
+    } else {
+        (row.left_center() + vec2(28.0, 0.0), egui::Align2::LEFT_CENTER)
+    }
+}
+
+/// The instance buttons of an effect row: at the row's reading-end edge.
+fn fx_buttons_at(row: egui::Rect) -> (egui::Pos2, egui::Pos2) {
+    if crate::direction::is_rtl() {
+        (row.left_center() + vec2(22.0, 0.0), row.left_center() + vec2(8.0, 0.0))
+    } else {
+        (row.right_center() - vec2(22.0, 0.0), row.right_center() - vec2(8.0, 0.0))
+    }
 }
 
 /// An effect row's checkbox: an accent box with a tick when on, an outline when off.
@@ -828,6 +846,7 @@ fn fx_checkbox(p: &egui::Painter, cb: egui::Rect, on: bool, t: &Tokens) {
     }
 }
 
+/// Dialog body: the effect list at the reading start, the parameters at the reading end.
 pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     let t = Tokens::get(ui.ctx());
     let selected = f.get("selected").and_then(Value::as_str).unwrap_or("dropShadow").to_string();
@@ -835,7 +854,7 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
     let mut new_style = false;
     let invalid = validate_params(f).err();
     ui.horizontal_top(|ui| {
-        // Left: effect list.
+        // Reading-start side: the effect list.
         ui.vertical(|ui| {
             ui.set_width(190.0);
             // Styles & Blending Options rows (matching the effect row layout & padding).
@@ -847,13 +866,8 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
                 } else if resp.hovered() {
                     ui.painter().rect_filled(rect, t.radius_sm, t.hover.gamma_multiply(0.5));
                 }
-                ui.painter().text(
-                    rect.left_center() + vec2(28.0, 0.0),
-                    egui::Align2::LEFT_CENTER,
-                    tl!(label),
-                    egui::FontId::proportional(12.5),
-                    if is_sel { t.text } else { t.text_dim },
-                );
+                let (pos, align) = fx_label_at(rect);
+                ui.painter().text(pos, align, tl!(label), egui::FontId::proportional(12.5), if is_sel { t.text } else { t.text_dim });
                 if resp.clicked() {
                     f.insert("selected".into(), json!(id));
                 }
@@ -873,13 +887,8 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
                         ui.painter().rect_filled(rect, t.radius_sm, t.hover.gamma_multiply(0.5));
                     }
                     fx_checkbox(ui.painter(), fx_checkbox_rect(rect), false, &t);
-                    ui.painter().text(
-                        rect.left_center() + vec2(28.0, 0.0),
-                        egui::Align2::LEFT_CENTER,
-                        tl!(label),
-                        egui::FontId::proportional(12.5),
-                        t.text_faint,
-                    );
+                    let (pos, align) = fx_label_at(rect);
+                    ui.painter().text(pos, align, tl!(label), egui::FontId::proportional(12.5), t.text_faint);
                     if resp.clicked() {
                         add_instance(f, kind);
                     }
@@ -900,13 +909,8 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
                     let cb = fx_checkbox_rect(rect);
                     let cresp = ui.interact(cb, ui.scope_id().with(("fxcb", kind, id)), Sense::click());
                     fx_checkbox(ui.painter(), cb, on, &t);
-                    ui.painter().text(
-                        rect.left_center() + vec2(28.0, 0.0),
-                        egui::Align2::LEFT_CENTER,
-                        tl!(kind_label),
-                        egui::FontId::proportional(12.5),
-                        fx_label_color(on, &t),
-                    );
+                    let (pos, align) = fx_label_at(rect);
+                    ui.painter().text(pos, align, tl!(kind_label), egui::FontId::proportional(12.5), fx_label_color(on, &t));
                     // + adds another instance; − removes one once there are several.
                     if multi(kind) {
                         let btn = |ui: &egui::Ui, at: egui::Pos2, glyph: &str, tag: &str| {
@@ -916,11 +920,12 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
                             ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, glyph, egui::FontId::proportional(13.0), col);
                             hresp.clicked()
                         };
-                        if count > 1 && btn(ui, rect.right_center() - vec2(22.0, 0.0), "\u{2212}", "minus") {
+                        let (minus_at, plus_at) = fx_buttons_at(rect);
+                        if count > 1 && btn(ui, minus_at, "\u{2212}", "minus") {
                             remove_instance(f, id);
                             continue;
                         }
-                        if btn(ui, rect.right_center() - vec2(8.0, 0.0), "+", "plus") {
+                        if btn(ui, plus_at, "+", "plus") {
                             add_instance(f, kind);
                         }
                     }
@@ -937,13 +942,15 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
             }
         });
         widgets::vline(ui, 330.0);
-        // Right: parameters of the selected page.
+        // Reading-end side: the parameters of the selected page.
         ui.vertical(|ui| {
             ui.set_width(330.0);
             if selected == STYLES_PAGE {
-                ui.horizontal(|ui| {
+                // The header reads in the UI's direction: the title at the reading start, the
+                // pinned button at the reading end.
+                crate::direction::horizontal_centered(ui, |ui| {
                     ui.label(RichText::new(tl!("Styles")).font(crate::theme::semibold(14.0)).color(t.text));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.with_layout(crate::direction::trailing(), |ui| {
                         if crate::widgets::secondary_button(ui, tl!("New Style…"), 100.0).clicked() {
                             new_style = true;
                         }
@@ -983,9 +990,11 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
                 entry(f, &selected).and_then(|e| e.get("kind").and_then(Value::as_str)).unwrap_or("").to_string()
             };
             let label = KINDS.iter().find(|k| k.0 == sel_kind).map(|k| k.1).unwrap_or(if selected == BLENDING { "Blending Options" } else { "" });
-            ui.horizontal(|ui| {
+            // The page header reads in the UI's direction: the title at the reading start, the
+            // pinned preview switch at the reading end.
+            crate::direction::horizontal_centered(ui, |ui| {
                 ui.label(RichText::new(tl!(&label)).font(crate::theme::semibold(14.0)).color(t.text));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.with_layout(crate::direction::trailing(), |ui| {
                     let mut preview = f.get("preview").and_then(Value::as_bool).unwrap_or(true);
                     if widgets::checkbox(ui, &mut preview, tl!("Preview")).changed() {
                         f.insert("preview".into(), json!(preview));
@@ -1157,7 +1166,7 @@ pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Valu
             let page_kind = sel_kind != BLENDING && entry(f, &selected).is_some();
             ui.add_space(4.0);
             // Wrap: translated labels (ru, de) can be wider than the page column.
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min).with_main_wrap(true), |ui| {
+            ui.with_layout(crate::direction::trailing_min().with_main_wrap(true), |ui| {
                 ui.add_enabled_ui(page_kind, |ui| {
                     if crate::widgets::secondary_button(ui, tl!("Reset to Default"), 130.0).clicked()
                         && let Ok(v) = app.run("layer.layerStyle.defaultFor", json!({"kind": sel_kind}))
@@ -1332,9 +1341,10 @@ fn blending_page(ui: &mut egui::Ui, p: &mut Value, names: &[String]) {
     });
     for (key, label) in [("thisLayer", "This Layer:"), ("underlying", "Underlying Layer:")] {
         let mut q = blend_quad(p.get("blendIf").and_then(|a| a.get(sel)).and_then(|e| e.get(key)));
-        ui.horizontal(|ui| {
+        // The label sits at the reading start, the readout at the reading end.
+        crate::direction::horizontal_centered(ui, |ui| {
             ui.label(RichText::new(tl!(label)).color(t.text_dim));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(crate::direction::trailing(), |ui| {
                 let side = |lo: u8, hi: u8| if lo == hi { lo.to_string() } else { format!("{lo} / {hi}") };
                 ui.label(RichText::new(format!("{}    {}", side(q[0], q[1]), side(q[2], q[3]))).color(t.text));
             });
@@ -1472,3 +1482,139 @@ impl MaxAlpha for Color32 {
 
 #[cfg(test)]
 mod tests;
+
+/// The RTL geometry of the effect rows: the checkbox, the label and the instance
+/// buttons swap sides with the reading direction, the pinned groups follow the
+/// reading end.
+#[cfg(test)]
+mod rtl_tests {
+    use super::*;
+    use crate::direction::{Dir, direction_scope};
+
+    /// A 190-point-wide effect row, the width the dialog gives every row.
+    fn effect_row() -> egui::Rect {
+        egui::Rect::from_min_size(egui::pos2(100.0, 50.0), vec2(190.0, 26.0))
+    }
+
+    #[test]
+    fn effect_row_checkbox_sits_at_the_reading_start_edge() {
+        let row = effect_row();
+        {
+            let _ltr = direction_scope(Dir::Ltr);
+            let cb = super::fx_checkbox_rect(row);
+            assert_eq!(cb.left(), row.left() + 6.0);
+            assert_eq!(cb.top(), row.top() + 6.0);
+        }
+        {
+            let _rtl = direction_scope(Dir::Rtl);
+            let cb = super::fx_checkbox_rect(row);
+            assert_eq!(cb.right(), row.right() - 6.0);
+            assert!(cb.left() >= row.right() - 21.0, "the box hugs the row's right edge: {cb:?}");
+            assert!(cb.right() <= row.right() - 5.0, "the box hugs the row's right edge: {cb:?}");
+        }
+    }
+
+    #[test]
+    fn effect_row_label_anchors_into_the_reading_direction() {
+        let row = effect_row();
+        {
+            let _ltr = direction_scope(Dir::Ltr);
+            let (pos, align) = super::fx_label_at(row);
+            assert_eq!(align, egui::Align2::LEFT_CENTER);
+            assert_eq!(pos.x, row.left() + 28.0);
+        }
+        {
+            let _rtl = direction_scope(Dir::Rtl);
+            let (pos, align) = super::fx_label_at(row);
+            assert_eq!(align, egui::Align2::RIGHT_CENTER);
+            assert_eq!(pos.x, row.right() - 28.0);
+        }
+    }
+
+    #[test]
+    fn effect_row_instance_buttons_sit_at_the_reading_end_edge() {
+        let row = effect_row();
+        {
+            let _ltr = direction_scope(Dir::Ltr);
+            let (minus_at, plus_at) = super::fx_buttons_at(row);
+            assert_eq!(minus_at.x, row.right() - 22.0);
+            assert_eq!(plus_at.x, row.right() - 8.0);
+        }
+        {
+            let _rtl = direction_scope(Dir::Rtl);
+            let (minus_at, plus_at) = super::fx_buttons_at(row);
+            assert_eq!(minus_at.x, row.left() + 22.0);
+            assert_eq!(plus_at.x, row.left() + 8.0);
+            assert!(minus_at.x < row.left() + 30.0, "the buttons hug the row's left edge: {minus_at:?}");
+        }
+    }
+
+    /// The dialog body in a harness, drawn in `dir`.
+    fn body_harness(dir: Dir, selected: &str) -> egui_kittest::Harness<'static, PhotocraftApp> {
+        let _dir = direction_scope(dir);
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        let _ = app.run("file.new", json!({"width": 32, "height": 32}));
+        let l = Layer::raster("x", photocraft_doc::PixelFormat::RGBA8);
+        let fields = initial_fields(&l, Some(selected), 120.0);
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(900.0, 700.0)).build_ui_state(
+            move |ui, app: &mut PhotocraftApp| {
+                if !ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    return;
+                }
+                let mut f = fields.clone();
+                body(app, ui, &mut f);
+            },
+            app,
+        );
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ProMedium);
+        h.run_steps(3);
+        h
+    }
+
+    /// The first node with this label on screen: the page title.
+    fn labelled(h: &egui_kittest::Harness<'static, PhotocraftApp>, label: &str) -> egui::Rect {
+        use egui_kittest::kittest::Queryable;
+        h.query_all_by_label(label).next().expect("the label is on screen").rect()
+    }
+
+    /// The rect of the button with this label.
+    fn button(h: &egui_kittest::Harness<'static, PhotocraftApp>, label: &str) -> egui::Rect {
+        use egui_kittest::kittest::Queryable;
+        h.get_by_role_and_label(egui::accesskit::Role::Button, label).rect()
+    }
+
+    /// The pinned "New Style…" button sits at the header row's reading end: after the title
+    /// in LTR, before it in RTL, the same distance from the reading start.
+    #[test]
+    fn the_new_style_button_is_pinned_to_the_reading_end() {
+        let ltr = body_harness(Dir::Ltr, STYLES_PAGE);
+        let ltr_title = labelled(&ltr, "Styles");
+        let ltr_button = button(&ltr, "New Style…");
+        let rtl = body_harness(Dir::Rtl, STYLES_PAGE);
+        let rtl_title = labelled(&rtl, "Styles");
+        let rtl_button = button(&rtl, "New Style…");
+        assert!(ltr_button.left() > ltr_title.right(), "LTR: the button follows the title");
+        assert!(rtl_button.right() < rtl_title.left(), "RTL: the button precedes the title");
+        let ltr_gap = ltr_button.right() - ltr_title.left();
+        let rtl_gap = rtl_title.right() - rtl_button.left();
+        assert!((ltr_gap - rtl_gap).abs() < 1.0, "the same distance from the reading start: {ltr_gap} / {rtl_gap}");
+        assert!(ltr_gap > 250.0, "the button is pinned to the far end: {ltr_gap}");
+    }
+
+    /// The "Reset to Default"/"Make Default" group hugs the page column's reading end: the
+    /// right edge in LTR, the left edge in RTL.
+    #[test]
+    fn the_default_buttons_group_is_pinned_to_the_reading_end() {
+        let ltr = body_harness(Dir::Ltr, "dropShadow");
+        let ltr_title = labelled(&ltr, "Drop Shadow");
+        let ltr_group = button(&ltr, "Reset to Default").union(button(&ltr, "Make Default"));
+        let rtl = body_harness(Dir::Rtl, "dropShadow");
+        let rtl_title = labelled(&rtl, "Drop Shadow");
+        let rtl_group = button(&rtl, "Reset to Default").union(button(&rtl, "Make Default"));
+        assert!(ltr_group.right() > ltr_title.left() + 200.0, "LTR: the group hugs the right end: {ltr_group:?}");
+        assert!(rtl_group.left() < rtl_title.right() - 200.0, "RTL: the group hugs the left end: {rtl_group:?}");
+        let ltr_gap = ltr_group.right() - ltr_title.left();
+        let rtl_gap = rtl_title.right() - rtl_group.left();
+        assert!((ltr_gap - rtl_gap).abs() < 1.0, "the same distance from the reading start: {ltr_gap} / {rtl_gap}");
+    }
+}
