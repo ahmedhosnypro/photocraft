@@ -210,8 +210,8 @@ fn curves_mode_row(ui: &mut egui::Ui, v: &mut Value, key: &str, gray: bool) -> E
 pub(super) fn curves(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     let mut edit = Edit::default();
     // The panel is a dialog body: in a right-to-left UI its blocks hug the reading start and its
-    // rows read from the right. The graph keeps its physical left-to-right mapping — input on the
-    // left, output on the right — like a data plot, as Photoshop's Curves graph does.
+    // rows read from the right. The graph stays a physical data plot — its curve and its gradient
+    // bars keep their positions, like Photoshop's Curves graph.
     ui.with_layout(crate::direction::body_layout(), |ui| edit = curves_body(ui, v, cx));
     edit
 }
@@ -405,9 +405,15 @@ mod tests {
 
     /// The Curves panel over a fresh adjustment, drawn in `dir`.
     fn harness(dir: Dir) -> egui_kittest::Harness<'static, Value> {
-        let _dir = crate::direction::direction_scope(dir);
         let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(380.0, 420.0)).build_ui_state(
-            |ui, v: &mut Value| {
+            move |ui, v: &mut Value| {
+                // The scope covers every frame, including the frames of a later gesture: the
+                // guard would otherwise die when this function returns.
+                let _dir = crate::direction::direction_scope(dir);
+                // The fonts install after the harness's first frame; skip that one.
+                if !ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    return;
+                }
                 let cx = EditorCx {
                     mem: egui::Id::unique("curves-rtl"),
                     hist: None,
