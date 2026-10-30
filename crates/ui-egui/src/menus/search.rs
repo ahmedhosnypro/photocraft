@@ -50,6 +50,9 @@ pub fn search_items<'a>(items: &'a [MenuItem], query: &str, lang: crate::i18n::L
 pub(super) fn help_search(ui: &mut egui::Ui, items: &[MenuItem], opening: bool, clicked: &mut Option<String>, nav: &mut crate::menu_nav::Nav) {
     let ctx = ui.ctx().clone();
     let lang = crate::i18n::current();
+    // One source of truth with the menu rows: a right-to-left menu reads its result rows from the
+    // right, the shortcut last.
+    let rtl = ui.style().right_to_left;
     let text_id = egui::Id::unique("help-menu-search");
     let pass_id = text_id.with("pass");
     // A fresh opening of the Help menu starts empty, with the field focused.
@@ -79,10 +82,8 @@ pub(super) fn help_search(ui: &mut egui::Ui, items: &[MenuItem], opening: bool, 
         for it in results {
             let mut trail: Vec<String> = it.path.iter().map(|p| crate::i18n::tr(lang, p).to_string()).collect();
             trail.push(translated_menu_label(lang, it));
-            let mut b = egui::Button::new(trail.join(" › "));
-            if let Some(sc) = &it.shortcut {
-                b = b.shortcut_text(crate::shortcuts::pretty(sc));
-            }
+            // The shortcut sits at the row's reading end, as in the other menu rows.
+            let b = crate::menu_keys::menu_row_button(trail.join(" › ").into(), it.shortcut.clone(), rtl);
             let hit = nav.row(ui, 0, it.enabled, Some(&it.id), None, |ui, _| {
                 let r = ui.add_enabled(it.enabled, b);
                 let hit = r.clicked() || released_on(ui, &r);

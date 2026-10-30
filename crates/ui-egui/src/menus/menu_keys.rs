@@ -8,8 +8,10 @@
 //! They are assigned per menu level from the labels as shown (so translated), unique within
 //! the level: Photoshop's letters for the top menus where the label has them (F E I L Y S T V
 //! W H), else the first unused letter, word starts first. Only ASCII letters and digits are keys
-//! the keyboard reports as such, so a label without one (Japanese, Chinese…) shows its English
-//! label's letter after it, as Windows menus do in those languages: "文件(F)" ([`localized`]).
+//! the keyboard reports as such, so a label without one shows its English label's letter after it,
+//! as Windows menus do in Chinese, Japanese and Korean: "文件(F)" ([`localized`]). A right-to-left
+//! language keeps its label instead and shows the key only while the mnemonics show, as a
+//! transient mark after the label ([`mnemonic_text`], [`menu_row_text`]).
 //!
 //! The state is view state in egui memory, like [`crate::menu_nav::Nav`]. On macOS the native
 //! menu bar replaces the in-window one and this never runs.
@@ -35,7 +37,7 @@ pub const TOP_PREFERRED: [(&str, char); 10] = [
 /// Keyboard state of the menu bar between frames.
 #[derive(Clone, Debug, Default)]
 pub struct Keys {
-    /// The title the keyboard is on with no menu open, in screen order (Alt tap, F10).
+    /// The title the keyboard is on with no menu open, in the menus' logical order (Alt tap, F10).
     pub focus: Option<usize>,
     /// Underline the mnemonics: the bar is focused or a menu was opened from the keyboard.
     pub underline: bool,
@@ -111,9 +113,10 @@ fn key_char(key: Key) -> Option<char> {
 
 /// Mnemonics for `labels`, unique within the group: the preferred letter when the label has it,
 /// else the first unused ASCII letter or digit, trying the first character of each word before
-/// the others. Compared case-insensitively; the returned letter is upper case.
-pub fn assign(labels: &[&str], preferred: &[Option<char>]) -> Vec<Option<char>> {
-    let mut used: Vec<char> = Vec::new();
+/// the others. Compared case-insensitively; the returned letter is upper case. `reserved` letters
+/// are taken already (keys shown by other rows).
+pub fn assign(labels: &[&str], preferred: &[Option<char>], reserved: &[char]) -> Vec<Option<char>> {
+    let mut used: Vec<char> = reserved.to_vec();
     let mut out = Vec::with_capacity(labels.len());
     for (i, label) in labels.iter().enumerate() {
         let upper: Vec<char> = label.chars().map(|c| c.to_ascii_uppercase()).collect();
@@ -136,22 +139,31 @@ pub fn assign(labels: &[&str], preferred: &[Option<char>]) -> Vec<Option<char>> 
 /// `english` (same order). A label with an ASCII letter or digit keeps its text and is assigned
 /// as [`assign`] does. One without (Chinese, Japanese, Korean…) can't be typed on its own, so it
 /// shows its English label's letter after it in parentheses and takes that letter, as Windows menus
-/// do in those languages ("文件(F)", #5863). Mnemonics stay unique within the group, and a shown
-/// "(F)" is always the row's key.
+/// do in those languages ("文件(F)", #5863). In a right-to-left language the label is shown
+/// unchanged (the key comes only while the mnemonics show, in the row-text helpers) and the
+/// English letter is still its key, so Alt+letter keeps firing. Mnemonics stay unique within the
+/// group, and a shown "(F)" is always the row's key.
 pub fn localized(labels: &[String], english: &[&str], preferred: &[Option<char>]) -> (Vec<String>, Vec<Option<char>>) {
+    let rtl = crate::direction::is_rtl();
     let typed = |l: &str| l.chars().any(|c| c.is_ascii_alphanumeric());
     // The key goes before a trailing ellipsis, as Windows writes it: "新建(N)…".
-    let with_key = |l: &str, k: char| match l.strip_suffix('…').map(|b| (b, "…")).or_else(|| l.strip_suffix("...").map(|b| (b, "..."))) {
-        Some((base, tail)) => format!("{base}({k}){tail}"),
-        None => format!("{l}({k})"),
+    let with_key = |l: &str, k: char| {
+        let (base, tail) = split_trailing_ellipsis(l);
+        format!("{base}({k}){tail}")
     };
-    let english_keys = assign(english, preferred);
+    let english_keys = assign(english, preferred, &[]);
     let mut shown = Vec::with_capacity(labels.len());
     let mut pref = Vec::with_capacity(labels.len());
     for (i, label) in labels.iter().enumerate() {
         match english_keys.get(i).copied().flatten().filter(|_| !typed(label)) {
-            Some(k) => {
+            Some(k) if !rtl => {
                 shown.push(with_key(label, k));
+                pref.push(Some(k));
+            }
+            // The label renders unchanged; the English key stays the row's mnemonic, just never
+            // written into the label.
+            Some(k) => {
+                shown.push(label.clone());
                 pref.push(Some(k));
             }
             None => {
@@ -160,14 +172,18 @@ pub fn localized(labels: &[String], english: &[&str], preferred: &[Option<char>]
             }
         }
     }
-    // The suffixed labels take their keys first: a label with letters of its own must not take
-    // the key a suffix shows ("Camera Raw 滤镜…" before "转换为智能滤镜(C)" leaves C to the latter).
-    let suffixed = |i: &usize| shown.get(*i) != labels.get(*i);
-    let order: Vec<usize> = (0..shown.len()).filter(suffixed).chain((0..shown.len()).filter(|i| !suffixed(i))).collect();
-    let ordered: Vec<&str> = order.iter().map(|&i| shown.get(i).map_or("", String::as_str)).collect();
-    let ordered_pref: Vec<Option<char>> = order.iter().map(|&i| pref.get(i).copied().flatten()).collect();
-    let mut keys = vec![None; shown.len()];
-    for (&i, key) in order.iter().zip(assign(&ordered, &ordered_pref)) {
+    // Letter-less rows take their English key before the lettered rows assign (the old
+    // suffixed-first priority): in a right-to-left UI nothing is suffixed, so `assign` alone
+    // would wipe their keys, and in Chinese a label with letters of its own must not take the key
+    // a suffix shows ("Camera Raw 滤镜…" before "转换为智能滤镜(C)" leaves C to the latter). The
+    // test is on the original labels: a shown suffix carries the key's letter itself.
+    let mut keys: Vec<Option<char>> =
+        (0..shown.len()).map(|i| (!typed(labels.get(i).map_or("", String::as_str))).then(|| english_keys.get(i).copied().flatten()).flatten()).collect();
+    let reserved: Vec<char> = keys.iter().flatten().copied().collect();
+    let rest: Vec<usize> = (0..shown.len()).filter(|&i| keys.get(i).copied().flatten().is_none()).collect();
+    let ordered: Vec<&str> = rest.iter().map(|&i| shown.get(i).map_or("", String::as_str)).collect();
+    let ordered_pref: Vec<Option<char>> = rest.iter().map(|&i| pref.get(i).copied().flatten()).collect();
+    for (&i, key) in rest.iter().zip(assign(&ordered, &ordered_pref, &reserved)) {
         if let Some(slot) = keys.get_mut(i) {
             *slot = key;
         }
@@ -175,15 +191,30 @@ pub fn localized(labels: &[String], english: &[&str], preferred: &[Option<char>]
     (shown, keys)
 }
 
+/// Splits a trailing ellipsis off a label, where a key or transient mark goes before it:
+/// `("فتح", "…")`, `("Open", "...")`, or `("Open", "")` when there is none.
+fn split_trailing_ellipsis(label: &str) -> (&str, &str) {
+    label.strip_suffix('…').map(|base| (base, "…")).or_else(|| label.strip_suffix("...").map(|base| (base, "..."))).unwrap_or((label, ""))
+}
+
 /// `prefix + label` as menu text with the mnemonic's first occurrence in `label` underlined
-/// (none when `mnemonic` is None). `color` is the text colour; None takes the widget's.
-pub fn mnemonic_text(ui: &Ui, prefix: &str, label: &str, mnemonic: Option<char>, color: Option<Color32>) -> egui::WidgetText {
+/// (none when `mnemonic` is None). `color` is the text colour; None takes the widget's. While the
+/// mnemonics show (`visible`), a label without its letter gains a transient `" (M)"` before a
+/// trailing ellipsis (an Arabic label keeps its key discoverable); without them the text is plain.
+pub fn mnemonic_text(ui: &Ui, prefix: &str, label: &str, mnemonic: Option<char>, visible: bool, color: Option<Color32>) -> egui::WidgetText {
     let color = color.unwrap_or(Color32::PLACEHOLDER);
     let font = egui::TextStyle::Button.resolve(ui.style());
     let plain = egui::TextFormat { font_id: font.clone(), color, ..Default::default() };
     let at = mnemonic.and_then(|m| label.char_indices().find(|(_, c)| c.to_ascii_uppercase() == m).map(|(i, c)| (i, c.len_utf8())));
-    let Some((i, len)) = at else {
-        return egui::RichText::new(format!("{prefix}{label}")).color(color).into();
+    let Some((i, len)) = at.filter(|_| visible) else {
+        let marked = mnemonic.filter(|_| visible).map_or_else(
+            || format!("{prefix}{label}"),
+            |m| {
+                let (base, tail) = split_trailing_ellipsis(label);
+                format!("{prefix}{base} ({m}){tail}")
+            },
+        );
+        return egui::RichText::new(marked).color(color).into();
     };
     let mut job = egui::text::LayoutJob::default();
     job.wrap.max_width = f32::INFINITY;
@@ -210,31 +241,71 @@ pub fn check_gutter(ui: &Ui) -> f32 {
     ui.painter().layout_no_wrap(CHECK_MARK.to_owned(), font, Color32::PLACEHOLDER).size().x
 }
 
-/// A menu row's text (#5705): the label behind a fixed-width checkmark column ([`check_gutter`]),
-/// with ✔ in the column when `checked`, and the mnemonic underlined when given (as
-/// [`mnemonic_text`]).
-pub fn menu_row_text(ui: &Ui, checked: bool, label: &str, mnemonic: Option<char>) -> egui::WidgetText {
+/// Which end of a menu row the checkmark column sits on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GutterSide {
+    /// The row's reading start: its left edge in a left-to-right row, its right edge in a
+    /// right-to-left one, where native menus keep the column.
+    ReadingStart,
+    /// The row's reading end.
+    ReadingEnd,
+}
+
+/// A menu row's text (#5705): the label behind a fixed-width checkmark column ([`check_gutter`])
+/// on `side`, with ✔ in the column when `checked`, and the mnemonic underlined while
+/// `mnemonic_visible` — a label without its letter then shows a transient `" (M)"`, as
+/// [`mnemonic_text`] does.
+pub fn menu_row_text(ui: &Ui, checked: bool, label: &str, mnemonic: Option<char>, mnemonic_visible: bool, side: GutterSide) -> egui::WidgetText {
+    let rtl = ui.style().right_to_left;
     let font = egui::TextStyle::Button.resolve(ui.style());
     let plain = egui::TextFormat { font_id: font, color: Color32::PLACEHOLDER, ..Default::default() };
+    let underlined = egui::TextFormat { underline: Stroke::new(1.0, Color32::PLACEHOLDER), ..plain.clone() };
     let mut job = egui::text::LayoutJob::default();
     job.wrap.max_width = f32::INFINITY;
+    // A right-to-left row reads from the right: the base direction is pinned so the column stays
+    // on the reading-start edge whatever script the label starts with (a Latin or digit-first
+    // label would infer a left-to-right paragraph and move it back).
+    if rtl {
+        job.direction = egui::epaint::text::TextDirection::RightToLeft;
+    }
+    let at = mnemonic.and_then(|m| label.char_indices().find(|(_, c)| c.to_ascii_uppercase() == m).map(|(i, c)| (i, c.len_utf8())));
+    // The label's pieces in reading order: the underlined letter, or the transient mark when the
+    // label can't hold it and the mnemonics show.
+    let mut pieces: Vec<(String, egui::TextFormat)> = match at.filter(|_| mnemonic_visible) {
+        Some((i, len)) => vec![
+            (label.get(..i).unwrap_or_default().to_owned(), plain.clone()),
+            (label.get(i..i + len).unwrap_or_default().to_owned(), underlined),
+            (label.get(i + len..).unwrap_or_default().to_owned(), plain.clone()),
+        ],
+        None => match mnemonic.filter(|_| mnemonic_visible).map(|m| {
+            let (base, tail) = split_trailing_ellipsis(label);
+            (base.to_owned(), format!(" ({m}){tail}"))
+        }) {
+            Some((base, mark)) => vec![(base, plain.clone()), (mark, plain.clone())],
+            None => vec![(label.to_owned(), plain.clone())],
+        },
+    };
+    pieces.retain(|(text, _)| !text.is_empty());
     // The label starts after the column: a checked row draws the mark in it, the others leave it
     // empty (a leading space of the same width, not padding characters whose width varies).
     let mut lead = check_gutter(ui);
-    if checked {
+    let append_part = |job: &mut egui::text::LayoutJob, text: &str, format: &egui::TextFormat, lead: &mut f32| {
+        if text.is_empty() {
+            return;
+        }
+        job.append(text, *lead, format.clone());
+        *lead = 0.0;
+    };
+    let gutter_first = side == GutterSide::ReadingStart;
+    if gutter_first && checked {
         job.append(CHECK_MARK, 0.0, plain.clone());
         lead = 0.0;
     }
-    let at = mnemonic.and_then(|m| label.char_indices().find(|(_, c)| c.to_ascii_uppercase() == m).map(|(i, c)| (i, c.len_utf8())));
-    let parts = match at {
-        Some((i, len)) => [label.get(..i), label.get(i..i + len), label.get(i + len..)],
-        None => [Some(label), None, None],
-    };
-    for (k, part) in parts.into_iter().enumerate() {
-        let Some(part) = part.filter(|p| !p.is_empty()) else { continue };
-        let format =
-            if k == 1 && at.is_some() { egui::TextFormat { underline: Stroke::new(1.0, Color32::PLACEHOLDER), ..plain.clone() } } else { plain.clone() };
-        job.append(part, lead, format);
+    for (text, format) in &pieces {
+        append_part(&mut job, text, format, &mut lead);
+    }
+    if !gutter_first && checked {
+        job.append(CHECK_MARK, 0.0, plain.clone());
         lead = 0.0;
     }
     if job.sections.is_empty() {
@@ -242,6 +313,19 @@ pub fn menu_row_text(ui: &Ui, checked: bool, label: &str, mnemonic: Option<char>
         job.append("", lead, plain);
     }
     job.into()
+}
+
+/// A menu row's button: `text` with its `shortcut` at the row's reading end, weak-tinted as
+/// [`egui::Button::shortcut_text`] does. Plain `ui.add(Button)` lays its atoms out left-to-right
+/// whatever the direction, so in a right-to-left row the shortcut moves to the left side
+/// ([`egui::Button::left_text`]), where the row's far end now is.
+pub fn menu_row_button<'a>(text: egui::WidgetText, shortcut: Option<String>, rtl: bool) -> egui::Button<'a> {
+    let mut b = egui::Button::new(text);
+    if let Some(sc) = shortcut {
+        let pretty = crate::shortcuts::pretty(&sc);
+        b = if rtl { b.left_text(egui::RichText::new(pretty).weak()) } else { b.shortcut_text(pretty) };
+    }
+    b
 }
 
 impl Keys {
@@ -281,8 +365,8 @@ impl Keys {
     }
 
     /// Handle this frame's keys, after the menus were drawn. `tops` are the titles' popup ids
-    /// and `mnemonics` their letters, both in screen order; `nav` is the open menu's state. A
-    /// command a mnemonic ran lands in `clicked`.
+    /// and `mnemonics` their letters, both in logical menu order (File first); `nav` is the open
+    /// menu's state. A command a mnemonic ran lands in `clicked`.
     pub fn keys(&mut self, ctx: &egui::Context, tops: &[Id], mnemonics: &[Option<char>], nav: &mut Nav, clicked: &mut Option<String>) {
         if tops.is_empty() {
             return;
@@ -402,11 +486,14 @@ impl Keys {
         }
         let Some(focus) = self.focus else { return };
         let press = |k: Key| consume(Modifiers::NONE, k);
+        // In a right-to-left UI the bar is drawn right-to-left: the physical arrows swap, so the
+        // forward key (→, or ← there) moves to the next menu.
+        let (fwd, back) = crate::direction::horizontal_nav_keys();
         if press(Key::Escape) {
             self.focus = None;
-        } else if press(Key::ArrowRight) {
+        } else if press(fwd) {
             self.focus = Some((focus + 1) % n);
-        } else if press(Key::ArrowLeft) {
+        } else if press(back) {
             self.focus = Some((focus + n - 1) % n);
         } else if press(Key::ArrowDown) || press(Key::Enter) {
             open_top(focus, self);
@@ -438,17 +525,19 @@ mod tests {
     fn letters_are_unique_and_prefer_photoshop_s() {
         let labels = ["File", "Edit", "Image", "Layer", "Type", "Select", "Filter", "View", "Window", "Help"];
         let preferred: Vec<Option<char>> = TOP_PREFERRED.iter().map(|(_, c)| Some(*c)).collect();
-        assert_eq!(assign(&labels, &preferred), "FEILYSTVWH".chars().map(Some).collect::<Vec<_>>());
+        assert_eq!(assign(&labels, &preferred, &[]), "FEILYSTVWH".chars().map(Some).collect::<Vec<_>>());
         // Items: first letters first, then the next free letter of the word starts, then any.
         assert_eq!(
-            assign(&["New…", "Open…", "Open Recent", "Close", "Close All", "Save", "Save As…"], &[]),
+            assign(&["New…", "Open…", "Open Recent", "Close", "Close All", "Save", "Save As…"], &[], &[]),
             [Some('N'), Some('O'), Some('R'), Some('C'), Some('A'), Some('S'), Some('V'),]
         );
         // A preferred letter the label lacks (a translation) falls back; a taken one too.
-        assert_eq!(assign(&["Datei", "Bearbeiten"], &[Some('F'), Some('E')]), [Some('D'), Some('E')]);
-        assert_eq!(assign(&["Aa", "Ab", "Ba"], &[Some('A'), Some('A'), Some('A')]), [Some('A'), Some('B'), None]);
+        assert_eq!(assign(&["Datei", "Bearbeiten"], &[Some('F'), Some('E')], &[]), [Some('D'), Some('E')]);
+        assert_eq!(assign(&["Aa", "Ab", "Ba"], &[Some('A'), Some('A'), Some('A')], &[]), [Some('A'), Some('B'), None]);
+        // A reserved letter (a key another row shows) is not taken again.
+        assert_eq!(assign(&["关闭(C)-like", "Copy"], &[], &['C']), [Some('L'), Some('O')]);
         // Only ASCII letters and digits are keys: no mnemonic without one.
-        assert_eq!(assign(&["ファイル", "Zoom 100%", "✔ Rulers"], &[]), [None, Some('Z'), Some('R')]);
+        assert_eq!(assign(&["ファイル", "Zoom 100%", "✔ Rulers"], &[], &[]), [None, Some('Z'), Some('R')]);
     }
 
     #[test]

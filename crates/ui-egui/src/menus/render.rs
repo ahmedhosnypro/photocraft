@@ -13,6 +13,10 @@ const MENU_SEPARATOR: f32 = 9.0;
 
 pub(super) fn render_level_rows(ui: &mut egui::Ui, items: &[&MenuItem], depth: usize, clicked: &mut Option<String>, nav: &mut crate::menu_nav::Nav) {
     let lang = crate::i18n::current();
+    // One source of truth with the fork's arrow-glyph rotation and popup sides (set from the
+    // language by the theme): in a right-to-left menu the shortcut and the submenu arrow sit at
+    // the row's far end, which is now its left.
+    let rtl = ui.style().right_to_left;
     // Items never wrap: the menu widens to its longest label plus shortcut (translations can be
     // longer than the English).
     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
@@ -59,14 +63,13 @@ pub(super) fn render_level_rows(ui: &mut egui::Ui, items: &[&MenuItem], depth: u
             let label = shown_labels.get(next_row).cloned().unwrap_or_else(|| translated_menu_label(lang, it));
             let mnemonic = mnemonics.get(next_row).copied().flatten();
             next_row += 1;
-            // Checked, unchecked and plain rows share one checkmark column (#5705).
-            let text = crate::menu_keys::menu_row_text(ui, it.checked == Some(true), &label, mnemonic.filter(|_| nav.underline));
-            let mut b = egui::Button::new(text);
+            // Checked, unchecked and plain rows share one checkmark column (#5705), at the row's
+            // reading start; the key shows only while the mnemonics do.
+            let text =
+                crate::menu_keys::menu_row_text(ui, it.checked == Some(true), &label, mnemonic, nav.underline, crate::menu_keys::GutterSide::ReadingStart);
+            let mut b = crate::menu_keys::menu_row_button(text, it.shortcut.clone(), rtl);
             if let Some(tint) = it.color.as_deref().and_then(menu_tint) {
                 b = b.fill(tint.gamma_multiply(0.55));
-            }
-            if let Some(sc) = &it.shortcut {
-                b = b.shortcut_text(crate::shortcuts::pretty(sc));
             }
             let hit = nav.row(ui, depth - 1, it.enabled, Some(&it.id), mnemonic, |ui, _| {
                 let r = ui.add_enabled(it.enabled, b);
@@ -94,7 +97,7 @@ pub(super) fn render_level_rows(ui: &mut egui::Ui, items: &[&MenuItem], depth: u
             let mnemonic = mnemonics.get(next_row).copied().flatten();
             let shown = shown_labels.get(next_row).cloned().unwrap_or_else(|| crate::i18n::tr(lang, name).to_string());
             next_row += 1;
-            let title = crate::menu_keys::menu_row_text(ui, false, &shown, mnemonic.filter(|_| nav.underline));
+            let title = crate::menu_keys::menu_row_text(ui, false, &shown, mnemonic, nav.underline, crate::menu_keys::GutterSide::ReadingStart);
             ui.add_enabled_ui(enabled, |ui| {
                 nav.row(ui, depth - 1, enabled, None, mnemonic, |ui, nav| {
                     let (response, inner) = submenu_row(ui, title, |ui| render_level(ui, &child, depth + 1, clicked, nav));
@@ -124,7 +127,12 @@ fn submenu_row<R>(ui: &mut egui::Ui, title: egui::WidgetText, content: impl FnOn
     if open {
         ui.style_mut().visuals.widgets.inactive = ui.style().visuals.widgets.open;
     }
-    let response = ui.add(egui::Button::new(title).right_text(SubMenuButton::arrow_atom(None)));
+    // The arrow glyph rotates with the direction (the fork does it in `arrow_atom`); its side is
+    // ours: at the row's reading end, where the submenu opens. If this row ever delegates to
+    // `SubMenuButton::ui` (which applies the chrome direction itself), drop the branch.
+    let rtl = ui.style().right_to_left;
+    let button = egui::Button::new(title);
+    let response = if rtl { ui.add(button.left_text(SubMenuButton::arrow_atom(None))) } else { ui.add(button.right_text(SubMenuButton::arrow_atom(None))) };
     ui.style_mut().visuals.widgets.inactive = inactive;
     // The rect egui tests the pointer against (`SubMenu::show`), against the part that can be seen.
     let reach = response.rect.expand2(ui.spacing().item_spacing / 2.0);

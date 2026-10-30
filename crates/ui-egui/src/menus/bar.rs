@@ -45,13 +45,10 @@ pub fn menu_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> f32 {
             for (k, top) in TOP_MENUS.iter().enumerate() {
                 // egui's menu_button toggles on release; these titles open on the press (one
                 // gesture can press, drag to an item and release), so each drives its popup.
-                // The title the keyboard is on (Alt / F10) is lit like a hovered one.
-                let focused = keys.focus == Some(if rtl { TOP_MENUS.len() - 1 - k } else { k });
-                let label = if nav.underline {
-                    crate::menu_keys::mnemonic_text(ui, "", &top_labels[k], top_mnemonics[k], Some(t.text_dim))
-                } else {
-                    egui::RichText::new(top_labels[k].as_str()).color(t.text_dim).into()
-                };
+                // The title the keyboard is on (Alt / F10) is lit like a hovered one. The keys'
+                // indexes are the menus' logical order (File first), whatever side it is drawn on.
+                let focused = keys.focus == Some(k);
+                let label = crate::menu_keys::mnemonic_text(ui, "", &top_labels[k], top_mnemonics[k], nav.underline, Some(t.text_dim));
                 let mut button = egui::Button::new(label);
                 if focused {
                     button = button.fill(ui.visuals().widgets.hovered.weak_bg_fill);
@@ -108,17 +105,12 @@ pub fn menu_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> f32 {
             }
             edge = if rtl { buttons.iter().map(|b| b.rect.left()).fold(edge, f32::min) } else { buttons.iter().map(|b| b.rect.right()).fold(edge, f32::max) };
             switch_on_hover(ui.ctx(), &buttons);
-            // ← and → step to the menu on that side, so in screen order.
-            let mut tops: Vec<egui::Id> = buttons.iter().map(egui::Popup::default_response_id).collect();
-            if rtl {
-                tops.reverse();
-            }
+            // The keys' lists stay in logical menu order (File first): the arrows step to the
+            // menu on the side they point at, which `horizontal_nav_keys` swaps in a
+            // right-to-left UI (there File sits at the right and reading order runs leftward).
+            let tops: Vec<egui::Id> = buttons.iter().map(egui::Popup::default_response_id).collect();
             nav.keys(ui.ctx(), &tops, &mut clicked);
-            let mut mnemonics = top_mnemonics.clone();
-            if rtl {
-                mnemonics.reverse();
-            }
-            keys.keys(ui.ctx(), &tops, &mnemonics, &mut nav, &mut clicked);
+            keys.keys(ui.ctx(), &tops, &top_mnemonics, &mut nav, &mut clicked);
         });
     });
     keys.store(ui.ctx());
