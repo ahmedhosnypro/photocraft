@@ -28,6 +28,11 @@ pub(super) fn reveal_focused_control(ui: &egui::Ui) {
 
 // ----------------------------------------------------------------------------- options bar
 
+/// The font-ink gutter sits at the reading end of the bar: right in LTR, left in RTL.
+fn options_bar_gutter() -> egui::Margin {
+    if crate::direction::is_rtl() { egui::Margin { left: 2, ..Default::default() } } else { egui::Margin { right: 2, ..Default::default() } }
+}
+
 /// Options bar height: Preferences ▸ Workspace ▸ Enable Narrow Options Bar trims it, as in
 /// Photoshop, leaving the document more room.
 pub(super) fn options_bar_height(pro: bool, narrow: bool) -> f32 {
@@ -49,8 +54,8 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             ui.style_mut().spacing.scroll = egui::style::ScrollStyle { bar_width: 4.0, ..egui::style::ScrollStyle::floating() };
             egui::ScrollArea::horizontal().id_salt("tool-options").auto_shrink([false, false]).show(ui, |ui| {
                 // Font ink can extend beyond its advance width at fractional positions.
-                // Include its gutter in the container layout, including right-aligned actions.
-                egui::Frame::NONE.inner_margin(egui::Margin { right: 2, ..Default::default() }).show(ui, |ui| {
+                // Include its gutter in the container layout, including end-aligned actions.
+                egui::Frame::NONE.inner_margin(options_bar_gutter()).show(ui, |ui| {
                     crate::direction::horizontal_centered(ui, |ui| {
                         if t.pro {
                             crate::chrome_ui::home_button(app, ui);
@@ -526,7 +531,7 @@ fn selection_specific_options(app: &mut PhotocraftApp, ui: &mut egui::Ui, tool: 
             if pick_shield_color {
                 crate::crop_shield::pick_custom_color(app);
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(crate::direction::trailing(), |ui| {
                 if icons::button(
                     ui,
                     "check",
@@ -784,4 +789,120 @@ fn percent_field(ui: &mut egui::Ui, label: &str, value: &mut f32, range: std::op
 fn hint(ui: &mut egui::Ui, s: &str) {
     let t = Tokens::get(ui.ctx());
     ui.label(RichText::new(s).color(t.text_faint));
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::direction::{Dir, direction_scope};
+    use photocraft_doc::{Color, ColorMode, Document, SampleType, Size};
+
+    use super::{PhotocraftApp, Tool, options_bar_gutter};
+
+    /// The options bar on a plain document, drawn once the bar has settled.
+    fn options_bar_harness(app: PhotocraftApp) -> egui_kittest::Harness<'static, PhotocraftApp> {
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1400.0, 60.0)).build_ui_state(
+            |ui, app: &mut PhotocraftApp| {
+                if !ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    return;
+                }
+                crate::panels::options_bar(app, ui);
+            },
+            app,
+        );
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ProMedium);
+        h.run_steps(4);
+        h
+    }
+
+    fn app_with(tool: Tool) -> PhotocraftApp {
+        let doc = Document::with_background("p", Size::new(200, 150), ColorMode::Rgb, SampleType::U8, Color::WHITE);
+        let mut s = photocraft_engine::Session::new();
+        s.add_document(doc, None);
+        let mut app = PhotocraftApp::new(s, crate::Services::default());
+        app.ui.tool = tool;
+        app
+    }
+
+    fn doc_size(app: &PhotocraftApp) -> Option<(u32, u32)> {
+        app.session.active().map(|s| (s.doc.size.width, s.doc.size.height))
+    }
+
+    #[test]
+    fn options_bar_gutter_rides_the_reading_end() {
+        let ltr = direction_scope(Dir::Ltr);
+        let m = options_bar_gutter();
+        assert_eq!((m.left, m.right), (0, 2));
+        drop(ltr);
+        let _rtl = direction_scope(Dir::Rtl);
+        let m = options_bar_gutter();
+        assert_eq!((m.left, m.right), (2, 0));
+    }
+
+    /// The crop tool's commit/cancel group rides the reading end: far right in LTR, far left in
+    /// RTL, the two buttons' order mirrored.
+    #[test]
+    fn crop_commit_cancel_group_mirrors_in_rtl() {
+        use egui_kittest::kittest::Queryable;
+        let rects = |dir: Dir| {
+            let _scope = direction_scope(dir);
+            let h = options_bar_harness(app_with(Tool::Crop));
+            let commit = h.get_by_label_contains("Commit current crop operation").rect();
+            let cancel = h.get_by_label_contains("Cancel current crop operation").rect();
+            (commit, cancel)
+        };
+        let (ltr_commit, ltr_cancel) = rects(Dir::Ltr);
+        assert!(ltr_commit.center().x > ltr_cancel.center().x, "LTR order: {ltr_commit:?} vs {ltr_cancel:?}");
+        assert!(ltr_commit.center().x > 1400.0 * 0.75, "LTR group hugs the right end: {ltr_commit:?}");
+        let (rtl_commit, rtl_cancel) = rects(Dir::Rtl);
+        assert!(rtl_commit.center().x < rtl_cancel.center().x, "RTL order: {rtl_commit:?} vs {rtl_cancel:?}");
+        assert!(rtl_commit.center().x < 1400.0 * 0.25, "RTL group hugs the left end: {rtl_commit:?}");
+    }
+
+    /// The mirrored group keeps its own action: the commit button still commits the crop.
+    #[test]
+    fn crop_commit_keeps_its_action_in_rtl() {
+        use egui_kittest::kittest::Queryable;
+        let _scope = direction_scope(Dir::Rtl);
+        let mut app = app_with(Tool::Crop);
+        app.ui.crop_rect = Some([10.0, 10.0, 100.0, 80.0]);
+        let mut h = options_bar_harness(app);
+        h.get_by_label_contains("Commit current crop operation").click();
+        h.run_steps(2);
+        let st = h.state();
+        assert!(st.ui.crop_rect.is_none(), "the commit button commits the crop");
+        assert_eq!(doc_size(st), Some((90, 70)), "the crop reached the document");
+    }
+
+    /// Cancel drops the frame without touching the document.
+    #[test]
+    fn crop_cancel_drops_the_frame_in_rtl() {
+        use egui_kittest::kittest::Queryable;
+        let _scope = direction_scope(Dir::Rtl);
+        let mut app = app_with(Tool::Crop);
+        app.ui.crop_rect = Some([10.0, 10.0, 100.0, 80.0]);
+        let mut h = options_bar_harness(app);
+        h.get_by_label_contains("Cancel current crop operation").click();
+        h.run_steps(2);
+        let st = h.state();
+        assert!(st.ui.crop_rect.is_none(), "the cancel button drops the frame");
+        assert_eq!(doc_size(st), Some((200, 150)), "cancel leaves the document alone");
+    }
+
+    /// The Move tool's Auto-Select toggle comes before its target dropdown in reading order: the
+    /// toggle on the left in LTR, on the right in RTL.
+    #[test]
+    fn move_auto_select_reading_order_mirrors_in_rtl() {
+        use egui_kittest::kittest::Queryable;
+        let rects = |dir: Dir| {
+            let _scope = direction_scope(dir);
+            let h = options_bar_harness(app_with(Tool::Move));
+            let toggle = h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Auto-Select:").rect();
+            let dropdown = h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Auto-Select:").rect();
+            (toggle, dropdown)
+        };
+        let (ltr_toggle, ltr_dropdown) = rects(Dir::Ltr);
+        assert!(ltr_toggle.center().x < ltr_dropdown.center().x, "LTR order: {ltr_toggle:?} vs {ltr_dropdown:?}");
+        let (rtl_toggle, rtl_dropdown) = rects(Dir::Rtl);
+        assert!(rtl_toggle.center().x > rtl_dropdown.center().x, "RTL order: {rtl_toggle:?} vs {rtl_dropdown:?}");
+    }
 }
