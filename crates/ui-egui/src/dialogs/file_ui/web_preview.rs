@@ -356,7 +356,7 @@ mod tests {
                 Map::new(),
             );
             h.run_steps(2);
-            (text_x(&h, "Fit"), h.get_by_label("100%").rect().x)
+            (text_x(&h, "Fit"), h.get_by_label("100%").rect().center().x)
         };
         let (ltr_fit, ltr_pct) = row(crate::direction::Dir::Ltr);
         assert!(ltr_fit < ltr_pct, "LTR: Fit sits left of 100%: {ltr_fit} {ltr_pct}");
