@@ -287,7 +287,7 @@ fn theme_row(ui: &mut egui::Ui, title: &str, active: bool, selected: &mut String
                 }
                 for i in 0..options.len() {
                     let (id, kind) = options[if rtl { options.len() - 1 - i } else { i }];
-                    theme_swatch(ui, *kind, id, selected, favorites);
+                    theme_swatch(ui, kind, id, selected, favorites);
                 }
                 if !rtl && active {
                     ui.add_space(6.0);
