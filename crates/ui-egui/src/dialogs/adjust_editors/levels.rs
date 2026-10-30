@@ -61,13 +61,32 @@ pub(super) fn nearest(xs: &[f32], x: f32) -> Option<u8> {
 }
 
 pub(super) fn levels(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
+    let mut edit = Edit::default();
+    // The panel is a dialog body: in a right-to-left UI its blocks hug the reading start and its
+    // rows read from the right. The histogram, the tracks and the fields that give their values
+    // keep their physical left-to-right mapping, like Photoshop's Levels controls.
+    ui.with_layout(crate::direction::body_layout(), |ui| edit = levels_body(ui, v, cx));
+    edit
+}
+
+/// The value fields of a track, in the track's physical left-to-right order: the black field
+/// stays under the black handle. The fields give a slider's values, so they follow the track
+/// rather than the panel's mirrored row order.
+fn value_row(ui: &mut egui::Ui, width: f32, add: impl FnOnce(&mut egui::Ui)) {
+    let size = egui::vec2(width, ui.spacing().interact_size.y);
+    ui.allocate_ui_with_layout(size, egui::Layout::left_to_right(egui::Align::Center), add);
+}
+
+/// The Levels panel, drawn inside the mirrored body scope.
+fn levels_body(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     let t = Tokens::get(ui.ctx());
     let chans = tone_channels(space_of(v), cx.gray);
     let mut ch = 0;
     let mut auto = false;
     ui.horizontal(|ui| {
         ch = channel_picker(ui, cx.mem.with("levels-ch"), chans, tl!("Channel:"));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        // The Auto button hugs the row's reading end: the right in LTR, the left in RTL.
+        ui.with_layout(crate::direction::trailing(), |ui| {
             auto = widgets::secondary_button(ui, tl!("Auto"), 0.0).clicked();
         });
     });
@@ -128,7 +147,7 @@ pub(super) fn levels(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     handle(&sp, xpos(l[0]), sr.top() + 2.0, Color32::BLACK, t.text_dim);
     handle(&sp, xpos(gamma_pos(l[0], l[2], l[1])), sr.top() + 2.0, Color32::from_gray(128), t.text_dim);
     handle(&sp, xpos(l[2]), sr.top() + 2.0, Color32::WHITE, t.text_dim);
-    ui.horizontal(|ui| {
+    value_row(ui, w, |ui| {
         let fw = ((w - 16.0) / 3.0).min(70.0);
         let (mut nb, mut ng, mut nw) = (l[0], l[1], l[2]);
         let gap = ((w - 3.0 * fw) / 2.0 - 12.0).max(0.0);
@@ -183,7 +202,7 @@ pub(super) fn levels(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     let op = ui.painter_at(or.expand(6.0));
     handle(&op, oxpos(l[3]), or.top() + 2.0, Color32::BLACK, t.text_dim);
     handle(&op, oxpos(l[4]), or.top() + 2.0, Color32::WHITE, t.text_dim);
-    ui.horizontal(|ui| {
+    value_row(ui, w, |ui| {
         let fw = ((w - 16.0) / 3.0).min(70.0);
         let (mut a, mut c) = (l[3], l[4]);
         let ra = widgets::value_field(ui, &mut a, 0.0..=255.0, "", fw).accessible_name(tl!("Black"));
@@ -205,4 +224,84 @@ pub(super) fn levels(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
         e.changed = true;
     }
     e
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::direction::Dir;
+    use egui_kittest::kittest::Queryable;
+
+    /// The Levels panel over a fresh adjustment, drawn in `dir`.
+    fn harness(dir: Dir) -> egui_kittest::Harness<'static, Value> {
+        let _dir = crate::direction::direction_scope(dir);
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(380.0, 420.0)).build_ui_state(
+            |ui, v: &mut Value| {
+                let cx = EditorCx {
+                    mem: egui::Id::unique("levels-rtl"),
+                    hist: None,
+                    gray: false,
+                    swatches: [[0.0; 3], [1.0; 3]],
+                    gradients: Vec::new(),
+                    dialog: true,
+                    dynamic_color_sliders: true,
+                    isolated_curve: None,
+                };
+                levels(ui, v, &cx);
+            },
+            json!({}),
+        );
+        crate::PhotocraftApp::setup_context(&h.ctx, Default::default());
+        h.run_steps(4);
+        h
+    }
+
+    /// The rects of the nodes named `name`, top row first.
+    fn named(h: &egui_kittest::Harness<'_, Value>, name: &str) -> Vec<egui::Rect> {
+        let mut rs: Vec<egui::Rect> = h.query_all_by_label(name).map(|n| n.rect()).collect();
+        rs.sort_by(|a, b| a.top().total_cmp(&b.top()));
+        rs
+    }
+
+    /// The Levels panel mirrors its chrome in a right-to-left UI: the Auto button moves to the
+    /// reading end and the blocks hug the reading start. The histogram, the tracks and the
+    /// fields that give their values keep their physical left-to-right order, like Photoshop's
+    /// Levels controls.
+    #[test]
+    fn levels_panel_mirrors_its_chrome_under_rtl() {
+        let ltr = harness(Dir::Ltr);
+        let rtl = harness(Dir::Rtl);
+
+        let ltr_black = named(&ltr, "Black")[0];
+        let ltr_gamma = named(&ltr, "Gamma")[0];
+        let ltr_white = named(&ltr, "White")[0];
+        let rtl_black = named(&rtl, "Black")[0];
+        let rtl_gamma = named(&rtl, "Gamma")[0];
+        let rtl_white = named(&rtl, "White")[0];
+
+        // The fields give the track's values: they keep their physical order in both directions.
+        assert!(
+            ltr_black.left() < ltr_gamma.left() && ltr_gamma.left() < ltr_white.left(),
+            "LTR reads left to right: {ltr_black:?} {ltr_gamma:?} {ltr_white:?}"
+        );
+        assert!(
+            rtl_black.left() < rtl_gamma.left() && rtl_gamma.left() < rtl_white.left(),
+            "the fields keep the track's order in RTL: {rtl_black:?} {rtl_gamma:?} {rtl_white:?}"
+        );
+
+        // The panel's blocks sit at the reading start: the right in RTL.
+        assert!(rtl_black.left() > ltr_black.left(), "the block moves to the reading start: {ltr_black:?} {rtl_black:?}");
+
+        // The Auto button ends the row: the right in LTR, the left in RTL.
+        let ltr_auto = named(&ltr, "Auto")[0];
+        let rtl_auto = named(&rtl, "Auto")[0];
+        assert!(ltr_auto.left() > ltr_gamma.left(), "the Auto button ends the LTR row: {ltr_auto:?}");
+        assert!(rtl_auto.left() < rtl_gamma.left(), "the Auto button ends the RTL row: {rtl_auto:?}");
+
+        // The caption starts its block at the reading start too.
+        let ltr_label = named(&ltr, "Output Levels:")[0];
+        let rtl_label = named(&rtl, "Output Levels:")[0];
+        assert!(ltr_label.left() <= ltr_black.left() + 6.0, "the caption starts at the left in LTR: {ltr_label:?}");
+        assert!(rtl_label.right() >= rtl_white.right() - 6.0, "the caption starts at the right in RTL: {rtl_label:?}");
+    }
 }
