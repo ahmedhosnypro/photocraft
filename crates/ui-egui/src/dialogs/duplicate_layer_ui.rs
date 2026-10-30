@@ -46,10 +46,9 @@ pub fn body(app: &PhotocraftApp, ui: &mut egui::Ui, fields: &mut Map<String, Val
         _ => String::new(),
     };
     if crate::text::direction::is_rtl() {
-        // The fork's `egui::Grid` cannot be drawn in a right-to-left body: its cursor only
-        // advances left-to-right, so the placer's available width goes NaN and egui panics.
-        // The same rows are drawn by hand in reading order instead: the label at the reading
-        // start, the field beside it.
+        // The fork's `egui::Grid` ignores the direction: its cells always advance to the right,
+        // so in a right-to-left UI it would render unmirrored. The same rows are drawn by hand
+        // in reading order instead: the label at the reading start, the field beside it.
         ui.spacing_mut().item_spacing = egui::vec2(12.0, 6.0);
         if matches!(fields.get("name"), Some(Value::String(_))) {
             crate::text::direction::dialog_row(ui, |ui| name_row(ui, fields));
@@ -237,7 +236,7 @@ mod tests {
 /// every field follows its caption, with the dialog as wide as its left-to-right twin.
 #[cfg(test)]
 mod rtl_tests {
-    use egui_kittest::kittest::Queryable;
+    use egui_kittest::kittest::{NodeT, Queryable};
 
     use super::*;
 
@@ -290,5 +289,59 @@ mod rtl_tests {
         let ltr = width(crate::text::direction::Dir::Ltr);
         let rtl = width(crate::text::direction::Dir::Rtl);
         assert!((ltr - rtl).abs() < 1.0, "LTR {ltr} vs RTL {rtl}");
+    }
+
+    /// The dialog body's caption texts, in the order the rows add them.
+    const CAPTIONS: [&str; 3] = ["Name:", "Destination", "Document"];
+
+    /// The dialog's captions in reading order: every row top to bottom, each from its reading
+    /// start (`rtl` flips only the in-row order; the rows are vertical in both directions).
+    /// A label-role node carries its text as its value, not its label.
+    fn captions(h: &egui_kittest::Harness<'static, PhotocraftApp>, rtl: bool) -> Vec<String> {
+        let f = frame(h);
+        let mut rows: Vec<(f32, f32, String)> = h
+            .query_all_by_role(egui::accesskit::Role::Label)
+            .filter_map(|n| {
+                let r = n.rect();
+                let a = n.accesskit_node();
+                let text = a.value().or_else(|| a.label())?;
+                f.contains(r.center()).then_some((r.top(), if rtl { -r.left() } else { r.left() }, text))
+            })
+            .collect();
+        rows.sort_by(|a, b| {
+            a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        });
+        rows.into_iter().map(|(_, _, t)| t).collect()
+    }
+
+    /// The body's captions, without any other label the frame may overlap.
+    fn body_captions(c: &[String]) -> Vec<&str> {
+        c.iter().map(String::as_str).filter(|t| CAPTIONS.contains(t)).collect()
+    }
+
+    /// The row sequence is written once per direction; this twin pins the two together: the same
+    /// captions in the same reading order in both, and choosing the destination "New" in the
+    /// Document dropdown adds the second "Name:" row under RTL just as under LTR.
+    #[test]
+    fn rtl_the_caption_sequence_matches_the_ltr_twin_including_the_new_document_row() {
+        let captions_in = |dir| captions(&duplicate_layer(dir), dir == crate::text::direction::Dir::Rtl);
+        let ltr = captions_in(crate::text::direction::Dir::Ltr);
+        let rtl = captions_in(crate::text::direction::Dir::Rtl);
+        assert_eq!(body_captions(&ltr), ["Name:", "Destination", "Document"], "the LTR sequence");
+        assert_eq!(body_captions(&rtl), body_captions(&ltr), "the RTL twin repeats the captions in the same reading order");
+
+        let drive_new = |dir| {
+            let mut h = duplicate_layer(dir);
+            h.query_by_label("Document").expect("the Document dropdown").click();
+            h.run_steps(2);
+            h.query_by_label("New").expect("the New option").click();
+            h.run_steps(4);
+            assert_eq!(h.state().ui.dialogs.last().unwrap().fields["destination"], "new", "the dropdown chose New");
+            h
+        };
+        let ltr = captions(&drive_new(crate::text::direction::Dir::Ltr), false);
+        let rtl = captions(&drive_new(crate::text::direction::Dir::Rtl), true);
+        assert_eq!(body_captions(&ltr), ["Name:", "Destination", "Document", "Name:"], "LTR gains the document-name row");
+        assert_eq!(body_captions(&rtl), body_captions(&ltr), "RTL gains the second Name: row in the same place");
     }
 }
