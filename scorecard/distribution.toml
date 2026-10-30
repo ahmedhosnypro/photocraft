@@ -66,7 +66,7 @@ id = "DIST-220-4"
 target = "Translation coverage per language reported by xtask; RTL layout for Arabic and Hebrew"
 status = "done"
 issue = 220
-note = "`cargo xtask i18n-coverage` reports per-language coverage (#427); RTL languages mirror the full shell including dialogs, menus, panel interiors and document tabs (`text/direction.rs`, egui `Style::right_to_left`); Arabic (`ar`) is the first RTL catalog (2026-10-30)"
+note = "`cargo xtask i18n-coverage` reports per-language coverage (#427); RTL languages mirror the full shell (the canvas stays LTR) including dialogs, menus, panel interiors and document tabs (`text/direction.rs`, egui `Style::right_to_left`); Arabic (`ar`) is the first RTL catalog (2026-10-30)"
 
 [[item]]
 id = "DIST-220-5"

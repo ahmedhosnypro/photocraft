@@ -238,8 +238,8 @@ lists the missing strings per language, and `cargo xtask ci` prints that list wi
 Not translated: status-bar
 messages and errors (they stay English, also for agents), names that are user data (layers, styles,
 documents), strings assembled with `format!` that were not converted to `fmt`/`trn`. Done:
-right-to-left layout in panels and dialogs (the whole shell mirrors, `text/direction.rs` +
-egui `Style::right_to_left`). Not done yet: locale-aware number and date formats, automatic
+right-to-left layout in panels and dialogs (the whole shell mirrors except the canvas, which
+stays LTR like Photoshop, `text/direction.rs` + egui `Style::right_to_left`). Not done yet: locale-aware number and date formats, automatic
 language detection on the web build (native
 builds read `LANG`/`LC_*`, the macOS preferred languages and the Windows user locale).
 

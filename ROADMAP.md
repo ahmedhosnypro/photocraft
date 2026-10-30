@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~30 points (ready for real work ~45% → ~75%, with reliable PSD) and ~1,100–1,800 h away
 
-> **Last reviewed:** 2026-10-17 · **Last updated:** 2026-10-30 · **Change:** minor (Arabic RTL layout complete: shell chrome, dialogs, menus and rows, panel interiors, document tabs; DIST-220-4 done; previously minor: Object Finder retains large enclosed foregrounds (#6548); Russian catalog covers every dynamic label; oracle floor 145 of 258 and 953 open issues, as in gaps.md and on GitHub; toolbox count 56 of 68, 12 missing) · **Target:** Adobe Photoshop 2026
+> **Last reviewed:** 2026-10-17 · **Last updated:** 2026-10-31 · **Change:** minor (review fixes: `cargo xtask i18n-coverage` re-measured 2026-10-31 — 2,212 source keys, only `en` at 100%, `ar` 2,204/2,212, `hi` 323/2,212, `vi` shipped at 2,192/2,212; G13 retitled to the still-open items; RTL claims qualified with the LTR canvas); previously minor (Arabic RTL layout complete: shell chrome, dialogs, menus and rows, panel interiors, document tabs; DIST-220-4 done; previously minor: Object Finder retains large enclosed foregrounds (#6548); Russian catalog covers every dynamic label; oracle floor 145 of 258 and 953 open issues, as in gaps.md and on GitHub; toolbox count 56 of 68, 12 missing) · **Target:** Adobe Photoshop 2026
 
 PhotoCraft's one-page summary of how close it is to Adobe Photoshop 2026 (27.11.0, measured from
 the installed app on 2026-10-10) at version 0.6.0. Detail: [target-app parity](docs/target-app-parity.md)
@@ -86,24 +86,26 @@ Rows and evidence: [target-app-parity › Feature areas](docs/target-app-parity.
 
 ## Languages
 
-Measured with the `cargo xtask i18n-coverage` key universe (1,608 measured keys; catalogs also
-translate dynamic labels). `partial` everywhere
-because engine messages are still English. Detail: [localization-parity](docs/localization-parity.md).
+Measured with the `cargo xtask i18n-coverage` key universe (2,212 source keys measured
+2026-10-31; catalogs also translate dynamic labels): only `en` is at 100% of today's universe —
+`ar` 2,204/2,212 (99.6%), `hi` 323/2,212 (14.6%), `vi` 2,192/2,212 (99.1%), the rest 99.0–99.9%.
+`partial` everywhere because engine messages are still English. Detail:
+[localization-parity](docs/localization-parity.md).
 
 | Language | Code | UI strings | Status |
 |---|---|---:|---|
 | English | `en` | 100% | full |
-| Simplified Chinese | `zh-hans` | 100% | partial |
-| Spanish | `es` | 100% | partial |
-| Hindi | `hi` | 0% | none |
-| Arabic | `ar` | 100% | partial |
-| French | `fr` | 100% | partial |
-| Portuguese (Brazil) | `pt-br` | 100% | partial |
-| Indonesian | `id` | 100% | partial |
-| Japanese | `ja` | 100% | partial |
-| German | `de` | 100% | partial |
-| Korean | `ko` | 100% | partial |
-| Vietnamese | `vi` | 0% | none |
+| Simplified Chinese | `zh-hans` | 99% | partial |
+| Spanish | `es` | 99% | partial |
+| Hindi | `hi` | 15% | partial |
+| Arabic | `ar` | 99.6% | partial |
+| French | `fr` | 99% | partial |
+| Portuguese (Brazil) | `pt-br` | 99% | partial |
+| Indonesian | `id` | 99% | partial |
+| Japanese | `ja` | 99% | partial |
+| German | `de` | 99% | partial |
+| Korean | `ko` | 99% | partial |
+| Vietnamese | `vi` | 99% | partial |
 
 Also shipped: Traditional Chinese, Russian (every dynamic label, [notes](docs/localization-ru.md)), Ukrainian, Czech, Polish, Greek, Dutch, Italian (8).
 
@@ -138,7 +140,8 @@ Detail and the next releases: [docs/roadmap.md](docs/roadmap.md).
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-30 | minor | Arabic RTL layout complete (shell, dialogs, menus, panels, tabs); DIST-220-4 done |
+| 2026-10-31 | minor | Review fixes: language table re-measured against the 2,212-key `i18n-coverage` universe of 2026-10-31 (only `en` at 100%; `ar` 99.6%, `hi` 15% partial, `vi` 99%); RTL wording qualified with the LTR canvas |
+| 2026-10-30 | minor | Arabic RTL layout complete (shell, dialogs, menus, panels, tabs; the canvas stays LTR); DIST-220-4 done |
 | 2026-10-17 | minor | Object Finder retains large enclosed foregrounds (#6548) |
 | 2026-10-13 | minor | Focus item 1 quoted the oracle floor as 133 of 256; it is 145 of 258 (`crates/io/tests/it/corpus.rs`, gaps.md G1). Open issues 579 → 953 (2026-10-13) |
 | 2026-10-15 | minor | Russian catalog covers every dynamic UI label the other catalogs translate |
