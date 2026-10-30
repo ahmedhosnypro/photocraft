@@ -499,9 +499,11 @@ pub(crate) fn browser(
                 };
                 let rows = g.items.len().div_ceil(cols);
                 let (area, _) = ui.allocate_exact_size(vec2(w, rows as f32 * (cell.y + gap) + 2.0), Sense::hover());
+                let rtl = crate::direction::is_rtl();
+                let origin_x = grid_origin_x(area, pad, cell, gap, cols, rtl);
                 for (ii, it) in g.items.iter().enumerate() {
-                    let (col, row) = (grid_col(ii, cols, crate::direction::is_rtl()), ii / cols);
-                    let r = Rect::from_min_size(area.min + vec2(pad + col as f32 * (cell.x + gap), row as f32 * (cell.y + gap)), cell);
+                    let (col, row) = (grid_col(ii, cols, rtl), ii / cols);
+                    let r = Rect::from_min_size(pos2(origin_x + col as f32 * (cell.x + gap), area.min.y + row as f32 * (cell.y + gap)), cell);
                     let resp = ui.interact(r, ui.scope_id().with((panel, gi, ii)), Sense::click_and_drag());
                     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &it.name));
                     let is_sel = selected.as_deref() == Some(&it.key);
@@ -644,6 +646,14 @@ pub(crate) fn browser(
 /// cell left-to-right, the row's last cell right-to-left (same physical cells either way).
 fn grid_col(ii: usize, cols: usize, rtl: bool) -> usize {
     if rtl { cols - 1 - ii % cols } else { ii % cols }
+}
+
+/// A grid row block's left edge: the block anchors at the reading-start edge, so the inset sits
+/// there (left in LTR, right in RTL) and the leftover width at the reading end. A single-column
+/// list fills the whole width, so both directions anchor at `area.min.x`.
+fn grid_origin_x(area: Rect, pad: f32, cell: egui::Vec2, gap: f32, cols: usize, rtl: bool) -> f32 {
+    let grid_w = cols as f32 * cell.x + (cols as f32 - 1.0) * gap;
+    if rtl { area.right() - pad - grid_w } else { area.min.x + pad }
 }
 
 /// A list row's thumbnail rect and the x its name is drawn at: the thumbnail sits at the reading
@@ -958,6 +968,20 @@ mod tests {
         assert_eq!(grid_col(1, 4, true), 2);
         assert_eq!(grid_col(4, 4, true), 3, "the next row starts at the reading start again");
         assert_eq!(grid_col(0, 1, true), 0, "a single-column list has one column either way");
+        // The row block anchors at the reading-start edge: the inset sits there and the leftover
+        // width at the reading end, so the RTL grid is the mirror image of the LTR one.
+        let area = Rect::from_min_size(pos2(100.0, 0.0), vec2(250.0, 10.0));
+        let cell = vec2(40.0, 40.0);
+        let cols = 4; // grid_w = 4*40 + 3*GRID_GAP
+        let grid_w = cols as f32 * cell.x + (cols as f32 - 1.0) * GRID_GAP;
+        assert_eq!(grid_origin_x(area, GRID_INSET, cell, GRID_GAP, cols, false), area.left() + GRID_INSET);
+        assert_eq!(grid_origin_x(area, GRID_INSET, cell, GRID_GAP, cols, true), area.right() - GRID_INSET - grid_w);
+        // In RTL the first item's right edge is the reading-start inset: area.right() - GRID_INSET.
+        let first_x = grid_origin_x(area, GRID_INSET, cell, GRID_GAP, cols, true) + grid_col(0, cols, true) as f32 * (cell.x + GRID_GAP);
+        assert!((first_x + cell.x - (area.right() - GRID_INSET)).abs() < 1e-6);
+        // The list branch (one column, no pad) is unchanged in both directions.
+        assert_eq!(grid_origin_x(area, 0.0, vec2(area.width(), 24.0), 0.0, 1, true), area.left());
+        assert_eq!(grid_origin_x(area, 0.0, vec2(area.width(), 24.0), 0.0, 1, false), area.left());
     }
 
     /// A list row's thumbnail sits at the reading start and the name follows it.
