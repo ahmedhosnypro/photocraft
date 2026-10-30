@@ -792,3 +792,76 @@ fn sparse_large_preview_counts_coverage_without_a_dense_canvas_mask() {
     assert_eq!(selected_pixels(Some(&inverted), smaller), 999_999);
     assert_eq!(selected_pixels(None, area), 0);
 }
+
+/// The workspace's harness at 1400 × 900, as the LTR render test draws it.
+fn workspace_harness(app: PhotocraftApp) -> egui_kittest::Harness<'static, PhotocraftApp> {
+    let mut h = egui_kittest::Harness::builder().with_size(vec2(1400.0, 900.0)).build_ui_state(
+        |ui, app: &mut PhotocraftApp| {
+            let ctx = ui.ctx().clone();
+            if !ctx.fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                return;
+            }
+            show(app, &ctx);
+        },
+        app,
+    );
+    PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+    h.run_steps(4);
+    h
+}
+
+/// Left-to-right: the tools on the left, the Properties panel on the right, and the footer's OK
+/// and Cancel against the right edge with Reset at the left.
+#[test]
+fn ltr_keeps_the_workspace_layout() {
+    let mut app = app_with_selection();
+    open(&mut app).unwrap();
+    let h = workspace_harness(app);
+    let hand = h.get_by_label("Hand Tool (H)").rect();
+    assert!(hand.right() < 60.0, "the tool strip is on the left: {hand:?}");
+    let remember = h.query_by_label_contains("Remember Settings").expect("the checkbox").rect();
+    assert!(remember.left() > 1000.0, "the Properties panel is on the right: {remember:?}");
+    let cancel = h.get_by_label("Cancel").rect();
+    let ok = h.get_by_label("OK").rect();
+    let reset = h.get_by_label("Reset").rect();
+    assert!(cancel.left() > ok.right(), "Cancel is the outermost: {cancel:?} {ok:?}");
+    assert!(reset.left() < ok.left(), "Reset is at the left: {reset:?} {ok:?}");
+    // The Properties panel's own rows read left to right.
+    let color_aware = h.get_by_label("Color Aware").rect();
+    let object_aware = h.get_by_label("Object Aware").rect();
+    assert!(color_aware.left() < object_aware.left(), "the panel's rows read left to right: {color_aware:?} {object_aware:?}");
+    // The folding section titles hug the panel's left edge, as the fork's CollapsingHeader draws them.
+    let refine = h.get_by_label("Refine Mode").rect();
+    assert!(refine.left() > 1000.0 && refine.left() < 1100.0, "the section title hugs the panel's left edge: {refine:?}");
+}
+
+/// Right-to-left: the chrome mirrors — the tools on the right, the Properties panel on the left,
+/// OK and Cancel against the left edge with Reset at the right. The document stays left-to-right.
+#[test]
+fn rtl_mirrors_the_workspace_chrome() {
+    let _rtl = crate::text::direction::direction_scope(crate::text::direction::Dir::Rtl);
+    let mut app = app_with_selection();
+    open(&mut app).unwrap();
+    let h = workspace_harness(app);
+    let hand = h.get_by_label("Hand Tool (H)").rect();
+    assert!(hand.left() > 1340.0, "the tool strip is on the right: {hand:?}");
+    let remember = h.query_by_label_contains("Remember Settings").expect("the checkbox").rect();
+    assert!(remember.right() < 360.0, "the Properties panel is on the left: {remember:?}");
+    let cancel = h.get_by_label("Cancel").rect();
+    let ok = h.get_by_label("OK").rect();
+    let reset = h.get_by_label("Reset").rect();
+    assert!(cancel.right() < ok.left(), "Cancel is the outermost: {cancel:?} {ok:?}");
+    assert!(reset.left() > ok.right(), "Reset is at the right: {reset:?} {ok:?}");
+    // The options bar's row reads from the right: Add comes before Subtract, mirrored.
+    let add = h.get_by_label("Add").rect();
+    let subtract = h.get_by_label("Subtract").rect();
+    assert!(add.left() > subtract.right(), "the options bar mirrors: {add:?} {subtract:?}");
+    // The Properties panel's own rows read from the right.
+    let color_aware = h.get_by_label("Color Aware").rect();
+    let object_aware = h.get_by_label("Object Aware").rect();
+    assert!(color_aware.left() > object_aware.right(), "the panel's rows mirror: {color_aware:?} {object_aware:?}");
+    // The folding section titles lead with the arrow at the panel's reading-start (right) edge,
+    // where the fork's CollapsingHeader would leave them at the left.
+    let refine = h.get_by_label("Refine Mode").rect();
+    assert!(refine.right() > 300.0 && refine.right() <= 352.0, "the section title hugs the panel's right edge: {refine:?}");
+}
