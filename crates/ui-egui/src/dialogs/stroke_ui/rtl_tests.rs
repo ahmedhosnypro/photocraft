@@ -23,22 +23,29 @@ fn harness() -> egui_kittest::Harness<'static, PhotocraftApp> {
     h
 }
 
-/// The open Stroke dialog's Width field and Location dropdown, drawn under `dir`.
-fn rows(dir: crate::text::direction::Dir) -> (egui::Rect, egui::Rect) {
+/// The open Stroke dialog's frame, Width field and Location dropdown, drawn under `dir`.
+fn rows(dir: crate::text::direction::Dir) -> (egui::Rect, egui::Rect, egui::Rect) {
     let _dir = crate::text::direction::direction_scope(dir);
     let mut h = harness();
+    // The app flips egui's own direction flag with the language (`i18n::sync_context`); this
+    // harness draws the dialog without the app's frame, so it sets the flag itself. egui's
+    // `Ui::indent` indents from the right only under that flag.
+    crate::theme::set_direction(&h.ctx, dir == crate::text::direction::Dir::Rtl);
     let ctx = h.ctx.clone();
     crate::menus::invoke(h.state_mut(), &ctx, COMMAND, serde_json::json!({})).unwrap();
     h.run_steps(3);
-    (h.get_by_label(tl!("Width:")).rect(), h.get_by_value(tl!("Center")).rect())
+    let id = h.state().ui.dialogs.last().unwrap().id;
+    let frame = h.ctx.memory(|m| m.area_rect(egui::Id::unique(("dialog", id)))).expect("the dialog");
+    (h.get_by_label(tl!("Width:")).rect(), h.get_by_value(tl!("Center")).rect(), frame)
 }
 
 /// The rows read from the right: the dialog is centred in the window, so a mirrored row's two
-/// rects add up to the window's width, and each control moves to the other side of the centre.
+/// rects add up to the window's width, and each row group is packed at the reading start — the
+/// field follows the 112 pt caption column in from the frame's edge.
 #[test]
 fn rtl_the_rows_read_from_the_right() {
-    let (ltr_field, ltr_drop) = rows(crate::text::direction::Dir::Ltr);
-    let (rtl_field, rtl_drop) = rows(crate::text::direction::Dir::Rtl);
+    let (ltr_field, ltr_drop, ltr_frame) = rows(crate::text::direction::Dir::Ltr);
+    let (rtl_field, rtl_drop, rtl_frame) = rows(crate::text::direction::Dir::Rtl);
     assert!(
         (ltr_field.center().x + rtl_field.center().x - WINDOW).abs() < 2.0,
         "the Width field mirrors: {ltr_field:?} / {rtl_field:?}"
@@ -47,12 +54,19 @@ fn rtl_the_rows_read_from_the_right() {
         (ltr_drop.center().x + rtl_drop.center().x - WINDOW).abs() < 2.0,
         "the Location dropdown mirrors: {ltr_drop:?} / {rtl_drop:?}"
     );
-    // The control keeps the field's side of the caption: right of the centre in a left-to-right
-    // row, left of it in a mirrored one.
-    assert!(ltr_field.center().x > WINDOW / 2.0, "the field sits right of the centre: {ltr_field:?}");
-    assert!(rtl_field.center().x < WINDOW / 2.0, "the field sits left of the centre: {rtl_field:?}");
-    assert!(ltr_drop.center().x > WINDOW / 2.0, "the dropdown sits right of the centre: {ltr_drop:?}");
-    assert!(rtl_drop.center().x < WINDOW / 2.0, "the dropdown sits left of the centre: {rtl_drop:?}");
+    // The caption column sits between the frame's reading start and its control: the Width
+    // field starts one 112 pt caption plus padding in from the frame's left edge in a
+    // left-to-right dialog and from its right edge in a mirrored one.
+    let ltr_from_start = ltr_field.left() - ltr_frame.left();
+    let rtl_from_start = rtl_frame.right() - rtl_field.right();
+    assert!(
+        (120.0..140.0).contains(&ltr_from_start),
+        "the caption column precedes the field from the left: {ltr_from_start} in {ltr_frame:?}"
+    );
+    assert!(
+        (120.0..140.0).contains(&rtl_from_start),
+        "the caption column precedes the field from the right: {rtl_from_start} in {rtl_frame:?}"
+    );
 }
 
 /// The caption in its fixed column hugs the field it names: the box's right edge in a
