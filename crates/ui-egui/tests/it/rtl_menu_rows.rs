@@ -19,12 +19,20 @@ fn harness(lang: &str) -> Harness<'static, PhotocraftApp> {
     h
 }
 
-/// The painted text galleys with the left edge of their glyphs.
+/// The painted text galleys with the absolute left edge of their glyphs.
 fn painted(h: &Harness<'static, PhotocraftApp>) -> Vec<(String, f32)> {
     fn collect(shape: &egui::Shape, out: &mut Vec<(String, f32)>) {
         match shape {
             egui::Shape::Text(text) => {
-                let left = text.galley.rows.iter().flat_map(|r| r.glyphs.iter()).map(|g| g.pos.x).fold(f32::INFINITY, f32::min);
+                let left = text
+                    .galley
+                    .rows
+                    .iter()
+                    .map(|row| {
+                        let row_left = row.glyphs.iter().map(|g| g.pos.x).fold(f32::INFINITY, f32::min);
+                        row_left + row.pos.x + text.pos.x
+                    })
+                    .fold(f32::INFINITY, f32::min);
                 out.push((text.galley.job.text.clone(), left));
             }
             egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| collect(s, out)),
@@ -40,6 +48,20 @@ fn painted(h: &Harness<'static, PhotocraftApp>) -> Vec<(String, f32)> {
 
 fn galley_left(h: &Harness<'static, PhotocraftApp>, text: &str) -> Option<f32> {
     painted(h).into_iter().find(|(painted, _)| painted == text).map(|(_, x)| x)
+}
+
+#[test]
+fn dump_painted() {
+    for lang in ["ar", "en"] {
+        let mut h = harness(lang);
+        let tr = |s: &str| i18n::tr(i18n::current(), s).to_string();
+        h.get_by_label(&tr("File")).click();
+        h.run_steps(4);
+        println!("=== {lang} ===");
+        for (text, left) in painted(&h) {
+            println!("{left:8.1}  {text:?}");
+        }
+    }
 }
 
 /// An Arabic row reads label first from the right with the shortcut at the far left; the English
@@ -69,10 +91,10 @@ fn the_submenu_opens_to_the_left_of_its_row() {
     h.get_by_label(&tr("Image")).click();
     h.run_steps(4);
     let mode = tr("Mode");
-    h.get_by_label_contains(&mode).click();
+    h.get_by_label(&mode).click();
     h.run_steps(4);
     let child = h.get_by_label_contains(&tr("8 Bits/Channel")).rect();
-    let parent = h.get_by_label_contains(&mode).rect();
+    let parent = h.get_by_label(&mode).rect();
     assert!(child.right() <= parent.left() + 1.0, "the submenu hangs left of its row ({} vs {})", child.right(), parent.left());
 }
 
@@ -80,7 +102,7 @@ fn the_submenu_opens_to_the_left_of_its_row() {
 /// every other title, and Help ends the row on the left.
 #[test]
 fn the_bar_reads_from_the_right_in_arabic() {
-    let mut h = harness("ar");
+    let h = harness("ar");
     let tr = |s: &str| i18n::tr(i18n::current(), s).to_string();
     let file = h.query_by_label(&tr("File")).expect("the File title").rect();
     let help = h.query_by_label(&tr("Help")).expect("the Help title").rect();
@@ -98,7 +120,7 @@ fn the_keyboard_follows_the_reading_order_in_arabic() {
     h.run_steps(2);
     h.key_press(egui::Key::ArrowDown);
     h.run_steps(3);
-    assert!(h.query_by_label_contains(&tr("New")).is_some(), "↓ opens the lit File menu");
+    assert!(h.query_all_by_label_contains(&tr("New")).next().is_some(), "↓ opens the lit File menu");
     h.key_press(egui::Key::Escape);
     h.run_steps(2);
     h.key_press(egui::Key::F10);
@@ -107,5 +129,5 @@ fn the_keyboard_follows_the_reading_order_in_arabic() {
     h.run_steps(2);
     h.key_press(egui::Key::ArrowDown);
     h.run_steps(3);
-    assert!(h.query_by_label_contains(&tr("Undo")).is_some(), "← advanced to Edit and ↓ opened it");
+    assert!(h.query_all_by_label_contains(&tr("Undo")).next().is_some(), "← advanced to Edit and ↓ opened it");
 }
