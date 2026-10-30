@@ -405,7 +405,9 @@ fn eyedropper(ui: &mut egui::Ui, badge: &str, selected: bool, label: &str) -> eg
     let t = Tokens::get(ui.ctx());
     let r = crate::icons::button(ui, "pipette", 26.0, selected, label);
     if !badge.is_empty() {
-        let at = r.rect.right_bottom() - vec2(5.0, 6.0);
+        // The badge hugs the pipette's bottom corner: the right in a left-to-right row, the left
+        // in a mirrored one.
+        let at = if crate::direction::is_rtl() { r.rect.left_bottom() + vec2(5.0, -6.0) } else { r.rect.right_bottom() - vec2(5.0, 6.0) };
         ui.painter().text(at, egui::Align2::CENTER_CENTER, badge, crate::theme::semibold(12.0), if selected { t.accent_text } else { t.text });
     }
     r.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), selected, label));
@@ -418,6 +420,13 @@ fn set_points(f: &mut Map<String, Value>, k: &str, pts: &[[f64; 2]]) {
 
 /// Dialog body.
 pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
+    // One direction-aware body: in a left-to-right UI the layout is egui's default, so nothing
+    // moves; in a right-to-left one the blocks hug the reading start and every row mirrors.
+    ui.with_layout(crate::direction::body_layout(), |ui| body_fields(app, ui, f));
+}
+
+/// The Color Range dialog's fields.
+fn body_fields(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     let t = Tokens::get(ui.ctx());
     let c = controls(f);
     let select = s(f, "select", "sampledColors").to_string();
@@ -746,3 +755,8 @@ fn order(f: &Map<String, Value>, add: usize, sub: usize) -> Option<Value> {
 
 #[cfg(test)]
 mod tests;
+
+/// The Color Range body mirrors in a right-to-left UI: the rows read from the right, the select
+/// dropdown ends its row at the reading end, and the Selection / Image radios swap order.
+#[cfg(test)]
+mod rtl_tests;
