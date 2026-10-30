@@ -222,8 +222,21 @@ mod rtl_tests {
             .unwrap_or_else(|| panic!("the painted `{text}`"))
     }
 
-    /// A section header drawn in `dir`: its title and the row it sits in.
-    fn section_header(dir: Dir) -> (egui::Rect, egui::Rect) {
+    /// The painted box of the icon image inside `within`.
+    fn painted_icon(h: &Harness<'_, ()>, within: egui::Rect) -> egui::Rect {
+        h.output()
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Image(img) if img.rect.intersects(within) => Some(img.rect),
+                _ => None,
+            })
+            .next()
+            .unwrap_or_else(|| panic!("the painted icon"))
+    }
+
+    /// A section header drawn in `dir`: its title box, its chevron box, and the row it sits in.
+    fn section_header(dir: Dir) -> (egui::Rect, egui::Rect, egui::Rect) {
         let _dir = direction_scope(dir);
         let mut h = Harness::builder().with_size(vec2(300.0, 120.0)).build_ui_state(
             |ui, _state: &mut ()| {
@@ -242,7 +255,7 @@ mod rtl_tests {
             .find(|(title, _)| title == "Appearance")
             .map(|(_, r)| r)
             .unwrap_or_else(|| panic!("the section row"));
-        (painted_text(&h, "Appearance"), row)
+        (painted_text(&h, "Appearance"), painted_icon(&h, row), row)
     }
 
     /// The painted text boxes of a draw call in `dir`.
@@ -280,17 +293,27 @@ mod rtl_tests {
     /// before the row's right edge, where the chevron leads it.
     #[test]
     fn section_header_reads_from_the_right_in_rtl() {
-        let (ltr_title, ltr_row) = section_header(Dir::Ltr);
+        let (ltr_title, ltr_chev, ltr_row) = section_header(Dir::Ltr);
         assert!(
             (ltr_title.left() - (ltr_row.left() + 18.0)).abs() < 1.0,
             "LTR: the title starts 18 px into its row: {ltr_title:?} {ltr_row:?}"
         );
+        assert!(
+            (ltr_chev.center().x - (ltr_row.left() + 7.0)).abs() < 1.0,
+            "LTR: the chevron leads 7 px into its row: {ltr_chev:?} {ltr_row:?}"
+        );
+        assert!(ltr_chev.right() <= ltr_title.left(), "LTR: the chevron stays before the title: {ltr_chev:?} {ltr_title:?}");
 
-        let (rtl_title, rtl_row) = section_header(Dir::Rtl);
+        let (rtl_title, rtl_chev, rtl_row) = section_header(Dir::Rtl);
         assert!(
             (rtl_title.right() - (rtl_row.right() - 18.0)).abs() < 1.0,
             "RTL: the title ends 18 px before its row's right edge: {rtl_title:?} {rtl_row:?}"
         );
+        assert!(
+            (rtl_chev.center().x - (rtl_row.right() - 7.0)).abs() < 1.0,
+            "RTL: the chevron leads 7 px before its row's right edge: {rtl_chev:?} {rtl_row:?}"
+        );
+        assert!(rtl_chev.left() >= rtl_title.right(), "RTL: the chevron stays after the title: {rtl_chev:?} {rtl_title:?}");
     }
 
     /// The layer header's icon and name stay on the physical left and the stacked label on the
