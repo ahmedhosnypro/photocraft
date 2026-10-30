@@ -334,7 +334,7 @@ mod rtl_tests {
             let mut h = duplicate_layer(dir);
             // Press the box, drag onto the New option, release there: the dropdown's
             // press-drag-release gesture (#2735).
-            let box_at = h.query_by_label("Document").expect("the Document dropdown").rect().center();
+            let box_at = h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Document").rect().center();
             h.hover_at(box_at);
             h.run_steps(1);
             h.drag_at(box_at);
