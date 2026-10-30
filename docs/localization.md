@@ -104,9 +104,10 @@ title, options and status bars read from the right
 (`crates/ui-egui/src/text/direction.rs`). The direction follows the language code, so a catalog
 needs no extra setting.
 
-Not mirrored: the canvas itself. The menu bar, dialogs, floating tool windows, menus and their
-rows, docked panel interiors, document tabs, the toolbox and the status bar mirror with the
-shell. egui 0.37 lays text out with the Unicode Bidirectional
+Not mirrored: the canvas itself, and the few sliders that still use egui's own slider (their
+track and handle stay left-to-right). The menu bar, dialogs, floating tool windows, menus and
+their rows, docked panel interiors, document tabs, the toolbox and the status bar mirror with
+the shell. egui 0.37 lays text out with the Unicode Bidirectional
 Algorithm (each paragraph takes the direction of its first strong letter), so
 catalogs, layer names and document names are handed to it in logical order, as typed; never
 pre-reorder a label. The title line follows the UI direction so "— PhotoCraft" lands at the

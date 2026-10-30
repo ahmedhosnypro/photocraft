@@ -23,9 +23,9 @@ installed per Creative Cloud install, here `en_US`). It has no Hindi, Arabic, In
 Vietnamese UI; Arabic and Hebrew users get English "Middle East" builds with the World-Ready
 composer, and its text engine handles RTL, Devanagari and Indic scripts.
 
-**Summary.** 7 of the 12 key languages at 100% of measured keys (status `partial` because of the
+**Summary.** 8 of the 12 key languages at 100% of measured keys (status `partial` because of the
 engine messages), 2 absent (Hindi, Vietnamese), plus 8 other languages. Weighted by
-speakers, ~55% ready. Remaining: 80–140 h, plus native-speaker review (recorded only for Italian,
+speakers, ~60% ready. Remaining: 70–120 h, plus native-speaker review (recorded only for Italian,
 2026-10-12).
 
 ## The twelve key languages
@@ -36,10 +36,7 @@ speakers, ~55% ready. Remaining: 80–140 h, plus native-speaker review (recorde
 | Simplified Chinese | `zh-hans` | 1,608 / 1,608 (100%) | 2,366 | dialogs, tooltips yes; engine messages English | CJK fonts (lazy loader), IME preedit/commit, vertical type | no | partial | 8–12 h |
 | Spanish | `es` | 1,844 / 1,844 (100%) | 4,010 | as above; complete dynamic UI key set | Latin | no | partial | 6–10 h |
 | Hindi | `hi` | partial | 448 | Top menus, toolbox tools, camera raw, dialogs, plurals | Devanagari shaping in the text engine (parley/HarfRust); no Devanagari fallback font (TYPE-218-3) | no | partial | 15–20 h |
-| Arabic | `ar` | 2,175 / 2,175 (100%, 2026-10-28) | 3,410 | as above; combined from the community catalogs with one term per concept | Arabic shaping and bidi in the UI (egui 0.37) and the text engine, Arabic fallback font; full
-RTL shell layout (DIST-220-4 done): shell chrome, dialogs, menus and rows, panel interiors,
-document tabs; canvas stays LTR; paragraph direction buttons but no visual RTL caret
-(TYPE-218-2 partial) | no | partial | 15–25 h |
+| Arabic | `ar` | 2,175 / 2,175 (100%, 2026-10-28) | 3,410 | as above; combined from the community catalogs with one term per concept | Arabic shaping and bidi in the UI (egui 0.37) and the text engine, Arabic fallback font; full RTL shell layout (DIST-220-4 done): shell chrome, dialogs, menus and rows, panel interiors, document tabs; canvas stays LTR; paragraph direction buttons but no visual RTL caret (TYPE-218-2 partial) | no | partial | 15–25 h |
 | French | `fr` | 1,608 / 1,608 (100%) | 2,766 | as above | Latin | no | partial | 6–10 h |
 | Portuguese (Brazil) | `pt-br` | 1,608 / 1,608 (100%) | 2,788 | as above | Latin; every `pt` locale uses it | no | partial | 6–10 h |
 | Indonesian | `id` | 1,608 / 1,608 (100%) | 2,764 | as above | Latin | no | partial | 6–10 h |
