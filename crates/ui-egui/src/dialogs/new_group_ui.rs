@@ -59,7 +59,10 @@ pub fn confirm(app: &mut PhotocraftApp, f: &Map<String, Value>) -> Result<Value,
 fn label(ui: &mut egui::Ui, text: &str) {
     let t = Tokens::get(ui.ctx());
     let (r, _) = ui.allocate_exact_size(vec2(64.0, 22.0), Sense::hover());
-    ui.painter().text(pos2(r.right() - 6.0, r.center().y), Align2::RIGHT_CENTER, text, egui::FontId::proportional(12.0), t.text_dim);
+    // The caption hugs the control beside it: the box's right edge in a left-to-right row, its
+    // left edge in a mirrored one.
+    let (x, anchor) = if crate::direction::is_rtl() { (r.left() + 6.0, Align2::LEFT_CENTER) } else { (r.right() - 6.0, Align2::RIGHT_CENTER) };
+    ui.painter().text(pos2(x, r.center().y), anchor, text, egui::FontId::proportional(12.0), t.text_dim);
 }
 
 /// The label colour's swatch beside its menu: a crossed box for No Color, as in the layer menu.
@@ -80,6 +83,14 @@ fn swatch(ui: &mut egui::Ui, color: LabelColor) {
 
 pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     ui.spacing_mut().item_spacing.y = 8.0;
+    // One direction-aware body: in a left-to-right UI the layout is egui's default, so nothing
+    // moves; in a right-to-left one the rows read from the right and every field follows its
+    // caption.
+    ui.with_layout(crate::direction::body_layout(), |ui| body_fields(ui, f));
+}
+
+/// The New Group dialog's fields.
+fn body_fields(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     ui.horizontal(|ui| {
         label(ui, tl!("Name:"));
         let mut name = f.get("name").and_then(Value::as_str).unwrap_or_default().to_string();
@@ -124,3 +135,51 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
 
 #[cfg(test)]
 mod tests;
+
+/// The New Group body mirrors in a right-to-left UI: the rows read from the right, and every
+/// field follows its caption.
+#[cfg(test)]
+mod rtl_tests {
+    use super::*;
+    use crate::direction::Dir;
+    use egui_kittest::kittest::Queryable;
+
+    /// The body drawn in `dir`, with the column it draws in.
+    fn harness(dir: Dir) -> (egui_kittest::Harness<'static, (Map<String, Value>, egui::Rect)>, egui::Rect) {
+        let _dir = crate::direction::direction_scope(dir);
+        let app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        let f = fields(&app, NEW_GROUP);
+        let mut h = egui_kittest::Harness::builder()
+            .with_size(egui::vec2(460.0, 240.0))
+            .with_context_setup(|ctx| PhotocraftApp::setup_context(ctx, crate::theme::ThemeKind::ALL[0]))
+            .build_ui_state(
+                |ui, s: &mut (Map<String, Value>, egui::Rect)| {
+                    s.1 = ui.max_rect();
+                    body(ui, &mut s.0);
+                },
+                (f, egui::Rect::ZERO),
+            );
+        h.run_steps(2);
+        let rect = h.state().1;
+        (h, rect)
+    }
+
+    /// The rows mirror: the caption comes before the field in a left-to-right UI and after it in
+    /// a right-to-left one.
+    #[test]
+    fn the_rows_mirror_in_a_right_to_left_ui() {
+        let (ltr, ltr_col) = harness(Dir::Ltr);
+        let ltr_name = ltr.get_by_role(egui::accesskit::Role::TextInput).rect();
+        let ltr_mode = ltr.get_by_label("Mode").rect();
+        let ltr_opacity = ltr.get_by_label("Opacity:").rect();
+        assert!(ltr_name.left() - ltr_col.left() > 50.0, "LTR: the caption comes before the field: {ltr_name:?} in {ltr_col:?}");
+        assert!(ltr_mode.right() < ltr_opacity.left(), "LTR: the mode dropdown comes before the opacity field: {ltr_mode:?} {ltr_opacity:?}");
+
+        let (rtl, rtl_col) = harness(Dir::Rtl);
+        let rtl_name = rtl.get_by_role(egui::accesskit::Role::TextInput).rect();
+        let rtl_mode = rtl.get_by_label("Mode").rect();
+        let rtl_opacity = rtl.get_by_label("Opacity:").rect();
+        assert!(rtl_col.right() - rtl_name.right() > 50.0, "RTL: the caption comes after the field: {rtl_name:?} in {rtl_col:?}");
+        assert!(rtl_mode.left() > rtl_opacity.right(), "RTL: the row mirrors: {rtl_mode:?} {rtl_opacity:?}");
+    }
+}
