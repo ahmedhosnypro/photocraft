@@ -248,10 +248,14 @@ mod tests {
         };
         let (frame, color, mode, clip) = layout(crate::direction::Dir::Ltr);
         assert!(color.left() - frame.left() < 80.0, "LTR: the caption hugs the reading start: {color:?} in {frame:?}");
+        // The 64 pt caption column ends at its field side, where the caption text hugs it.
+        assert!((color.right() - (frame.left() + 64.0)).abs() < 2.0, "LTR: the caption hugs the column's field side: {color:?} in {frame:?}");
         assert!(mode.left() > color.right(), "LTR: the dropdown ends the row: {color:?} {mode:?}");
         assert!(clip.left() - frame.left() > 70.0, "LTR: the checkbox row indents past the captions: {clip:?} in {frame:?}");
         let (frame, color, mode, clip) = layout(crate::direction::Dir::Rtl);
         assert!(frame.right() - color.right() < 80.0, "RTL: the caption hugs the reading start: {color:?} in {frame:?}");
+        // The 64 pt caption column ends at its field side, where the caption text hugs it.
+        assert!((frame.right() - 64.0 - color.left()).abs() < 2.0, "RTL: the caption hugs the column's field side: {color:?} in {frame:?}");
         assert!(mode.right() < color.left(), "RTL: the dropdown follows the caption to the reading end: {color:?} {mode:?}");
         assert!(frame.right() - clip.right() > 70.0, "RTL: the checkbox row indents past the captions: {clip:?} in {frame:?}");
         // The mirrored dialog is the same width as the left-to-right one.
