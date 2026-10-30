@@ -64,3 +64,12 @@ fn the_view_radios_mirror() {
     let rtl_image = rtl.get_by_label("Image").rect();
     assert!(rtl_selection.left() > rtl_image.right(), "RTL: the radios mirror: {rtl_selection:?} {rtl_image:?}");
 }
+
+/// The badge's anchor mirrors about the button's centre and stays on its bottom edge.
+#[test]
+fn the_badge_anchor_mirrors() {
+    let r = egui::Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(26.0, 26.0));
+    let (ltr, rtl) = (badge_anchor(r, false), badge_anchor(r, true));
+    assert!((ltr.x + rtl.x - (r.left() + r.right())).abs() < 0.01, "the badge mirrors: {ltr:?} / {rtl:?}");
+    assert!((ltr.y - rtl.y).abs() < 0.01, "the badge stays on the bottom edge: {ltr:?} / {rtl:?}");
+}

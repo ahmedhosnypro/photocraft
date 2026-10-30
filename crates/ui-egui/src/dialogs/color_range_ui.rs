@@ -400,14 +400,17 @@ fn radio(ui: &mut egui::Ui, on: bool, label: &str) -> egui::Response {
     .inner
 }
 
+/// The badge's anchor: the pipette's bottom corner, the reading-end one in a mirrored row.
+fn badge_anchor(rect: Rect, rtl: bool) -> egui::Pos2 {
+    if rtl { rect.left_bottom() + vec2(5.0, -6.0) } else { rect.right_bottom() - vec2(5.0, 6.0) }
+}
+
 /// Eyedropper button: the pipette icon with a +/− badge; labelled for accessibility.
 fn eyedropper(ui: &mut egui::Ui, badge: &str, selected: bool, label: &str) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let r = crate::icons::button(ui, "pipette", 26.0, selected, label);
     if !badge.is_empty() {
-        // The badge hugs the pipette's bottom corner: the right in a left-to-right row, the left
-        // in a mirrored one.
-        let at = if crate::direction::is_rtl() { r.rect.left_bottom() + vec2(5.0, -6.0) } else { r.rect.right_bottom() - vec2(5.0, 6.0) };
+        let at = badge_anchor(r.rect, crate::direction::is_rtl());
         ui.painter().text(at, egui::Align2::CENTER_CENTER, badge, crate::theme::semibold(12.0), if selected { t.accent_text } else { t.text });
     }
     r.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, ui.is_enabled(), selected, label));
