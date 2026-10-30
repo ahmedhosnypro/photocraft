@@ -172,6 +172,10 @@ mod rtl_tests {
         let state = State { app: PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default()), column: egui::Rect::ZERO };
         let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(320.0, 200.0)).build_ui_state(
             move |ui, state: &mut State| {
+                // The fonts install after the harness's first frame; skip that one.
+                if !ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    return;
+                }
                 state.column = ui.available_rect_before_wrap();
                 layer_editor(&mut state.app, ui, LayerId(1), &adj);
             },
