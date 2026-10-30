@@ -346,10 +346,20 @@ pub(super) fn shortcuts_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut
                     continue;
                 }
                 let top = shown_path.first().cloned().unwrap_or_else(|| tl!("Other").into());
+                // Grid columns always advance left to right, so a mirrored row emits its cells
+                // in reverse: the header label sits in the reading-start column.
+                let rtl = crate::direction::is_rtl();
                 if top != last_top {
-                    ui.label(RichText::new(&top).font(crate::theme::semibold(12.5)).color(t.text));
-                    ui.label("");
-                    ui.label("");
+                    let header = |ui: &mut egui::Ui| ui.label(RichText::new(&top).font(crate::theme::semibold(12.5)).color(t.text));
+                    if rtl {
+                        ui.label("");
+                        ui.label("");
+                        header(ui);
+                    } else {
+                        header(ui);
+                        ui.label("");
+                        ui.label("");
+                    }
                     ui.end_row();
                     last_top = top;
                 }
@@ -358,10 +368,10 @@ pub(super) fn shortcuts_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut
                     _ => shown_label,
                 };
                 let sel = selected == *id;
-                let name_row = ui.selectable_label(sel, RichText::new(format!("   {name}")).color(t.text_dim));
-                if name_row.clicked() {
-                    selected = id.clone();
-                }
+                // The name cell pads its reading-start side: leading spaces left-to-right,
+                // trailing spaces right-to-left (grid cells left-align their content).
+                let name_text = if rtl { format!("{name}   ") } else { format!("   {name}") };
+                let name_cell = |ui: &mut egui::Ui| ui.selectable_label(sel, RichText::new(&name_text).color(t.text_dim));
                 if tab == 0 {
                     let text = if sel && capture && !capture_alt {
                         tl!("Press keys…").to_string()
@@ -369,51 +379,91 @@ pub(super) fn shortcuts_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut
                         cur.as_deref().map(crate::shortcuts::pretty).unwrap_or_default()
                     };
                     let changed = overrides.contains_key(id) || alt_overrides.contains_key(id);
-                    let r = ui.add(
-                        egui::Button::new(RichText::new(tl!(&text)).size(12.0).color(if changed { t.accent_text } else { t.text })).min_size(vec2(120.0, 18.0)),
-                    );
+                    let key_cell = |ui: &mut egui::Ui| {
+                        ui.add(
+                            egui::Button::new(RichText::new(tl!(&text)).size(12.0).color(if changed { t.accent_text } else { t.text }))
+                                .min_size(vec2(120.0, 18.0)),
+                        )
+                    };
+                    // The further keys (F3 beside ⌘C), each removable on its own, as Photoshop
+                    // lists them as rows of their own (#3665).
+                    let alts_cell = |ui: &mut egui::Ui| -> Vec<(egui::Response, String)> {
+                        let mut buttons = Vec::new();
+                        ui.horizontal(|ui| {
+                            for k in &alts {
+                                let b = egui::Button::new(RichText::new(format!("{}  ×", crate::shortcuts::pretty(k))).size(11.0).color(t.text)).small();
+                                buttons.push((ui.add(b).on_hover_text(tl!("Delete Shortcut")), k.clone()));
+                            }
+                            if sel && capture && capture_alt {
+                                ui.label(RichText::new(tl!("Press keys…")).size(11.0).color(t.accent_text));
+                            }
+                            if changed {
+                                ui.label(RichText::new(tl!("modified")).color(t.text_faint).size(10.5));
+                            }
+                        });
+                        buttons
+                    };
+                    let (name_row, key_row, alt_buttons) = if rtl {
+                        let a = alts_cell(ui);
+                        let k = key_cell(ui);
+                        let n = name_cell(ui);
+                        (n, k, a)
+                    } else {
+                        let n = name_cell(ui);
+                        let k = key_cell(ui);
+                        let a = alts_cell(ui);
+                        (n, k, a)
+                    };
+                    if name_row.clicked() {
+                        selected = id.clone();
+                    }
                     // An unassigned shortcut shows no text: name it by the command it binds.
-                    let r = if text.is_empty() { r.labelled_by(name_row.id) } else { r };
-                    if r.clicked() {
+                    let key_row = if text.is_empty() { key_row.labelled_by(name_row.id) } else { key_row };
+                    if key_row.clicked() {
                         selected = id.clone();
                         capture = true;
                         capture_alt = false;
                         message.clear();
                         message_warning = false;
                     }
-                    // The further keys (F3 beside ⌘C), each removable on its own, as Photoshop
-                    // lists them as rows of their own (#3665).
-                    ui.horizontal(|ui| {
-                        for k in &alts {
-                            let b = egui::Button::new(RichText::new(format!("{}  ×", crate::shortcuts::pretty(k))).size(11.0).color(t.text)).small();
-                            if ui.add(b).on_hover_text(tl!("Delete Shortcut")).clicked() {
-                                alt_overrides.insert(id.clone(), alts.iter().filter(|x| *x != k).cloned().collect());
-                                selected = id.clone();
-                                message = tl!("Shortcut removed.").into();
-                                message_warning = false;
-                            }
+                    for (b, k) in alt_buttons {
+                        if b.clicked() {
+                            alt_overrides.insert(id.clone(), alts.iter().filter(|x| *x != &k).cloned().collect());
+                            selected = id.clone();
+                            message = tl!("Shortcut removed.").into();
+                            message_warning = false;
                         }
-                        if sel && capture && capture_alt {
-                            ui.label(RichText::new(tl!("Press keys…")).size(11.0).color(t.accent_text));
-                        }
-                        if changed {
-                            ui.label(RichText::new(tl!("modified")).color(t.text_faint).size(10.5));
-                        }
-                    });
+                    }
                 } else {
                     // Edit › Menus, Keyboard Shortcuts, Preferences, Save and Exit always stay (#5096).
                     let hideable = photocraft_engine::prefs::MenuCustomization::hideable(id);
                     let mut visible = !hideable || !hidden.contains(id);
-                    ui.add_enabled_ui(hideable, |ui| crate::widgets::checkbox(ui, &mut visible, tl!("Visible")));
+                    let visible_cell = |ui: &mut egui::Ui, visible: &mut bool| {
+                        ui.add_enabled_ui(hideable, |ui| crate::widgets::checkbox(ui, visible, tl!("Visible"))).response
+                    };
+                    let mut col = colors.get(id).cloned().unwrap_or_else(|| "none".into());
+                    let opts: Vec<(String, &str)> =
+                        ["none", "red", "orange", "yellow", "green", "blue", "violet", "gray"].iter().map(|c| (c.to_string(), *c)).collect();
+                    let color_cell =
+                        |ui: &mut egui::Ui, col: &mut String| crate::widgets::dropdown(ui, &format!("menu-color-{id}"), tl!("Color"), col, &opts, 90.0);
+                    let name_row = if rtl {
+                        let _dd = color_cell(ui, &mut col);
+                        let _cb = visible_cell(ui, &mut visible);
+                        name_cell(ui)
+                    } else {
+                        let n = name_cell(ui);
+                        let _cb = visible_cell(ui, &mut visible);
+                        let _dd = color_cell(ui, &mut col);
+                        n
+                    };
+                    if name_row.clicked() {
+                        selected = id.clone();
+                    }
                     if visible {
                         hidden.retain(|h| h != id);
                     } else if !hidden.contains(id) {
                         hidden.push(id.clone());
                     }
-                    let mut col = colors.get(id).cloned().unwrap_or_else(|| "none".into());
-                    let opts: Vec<(String, &str)> =
-                        ["none", "red", "orange", "yellow", "green", "blue", "violet", "gray"].iter().map(|c| (c.to_string(), *c)).collect();
-                    crate::widgets::dropdown(ui, &format!("menu-color-{id}"), tl!("Color"), &mut col, &opts, 90.0);
                     if col == "none" {
                         colors.remove(id);
                     } else {
