@@ -92,8 +92,8 @@ impl MaskRects {
     }
 }
 
-/// Paint `l`'s chains and mask thumbnails from `*x` (just right of the layer thumbnail plus its
-/// gap), advancing `*x` past them, and push chain clicks as commands.
+/// Paint `l`'s chains and mask thumbnails from `*x` (just past the layer thumbnail plus its
+/// gap, in reading direction), advancing `*x` past them, and push chain clicks as commands.
 #[allow(clippy::too_many_arguments)]
 pub fn paint(
     app: &mut PhotocraftApp,
@@ -109,9 +109,14 @@ pub fn paint(
 ) -> MaskRects {
     let t = Tokens::get(ctx);
     let mut out = MaskRects::default();
+    // `x` walks in reading direction (+1 left-to-right, -1 right-to-left): each item's rect is
+    // anchored at min(x, x + dir*w) and the cursor advances by dir*w. Thumbnail content stays
+    // physical; only positions mirror.
+    let dir = if crate::direction::is_rtl() { -1.0 } else { 1.0 };
     for (kind, enabled, linked) in masks(l) {
         // The chain sits in the gap before the thumbnail, centred between the two.
-        let chain = Rect::from_min_max(pos2(*x - 4.0, cy - ts / 2.0), pos2(*x - 4.0 + CHAIN_W, cy + ts / 2.0));
+        let (a, b) = if crate::direction::is_rtl() { (*x + 4.0, *x - (CHAIN_W - 4.0)) } else { (*x - 4.0, *x - 4.0 + CHAIN_W) };
+        let chain = Rect::from_min_max(pos2(a.min(b), cy - ts / 2.0), pos2(a.max(b), cy + ts / 2.0));
         let resp = ui.interact(chain, ui.scope_id().with(("mask-chain", l.id.0, kind == MaskKind::Vector)), Sense::click());
         if linked {
             paint_chain(painter, chain.center(), if resp.hovered() { t.text } else { t.icon });
@@ -129,8 +134,8 @@ pub fn paint(
             actions.push((format!("{}.linked", kind.command()), json!({"layer": l.id.0, "linked": !linked})));
         }
         out.chains.push((kind, chain));
-        *x += CHAIN_W - 2.0;
-        let r = Rect::from_min_size(pos2(*x, cy - ts / 2.0), vec2(ts, ts));
+        *x += dir * (CHAIN_W - 2.0);
+        let r = Rect::from_min_size(pos2((*x).min(*x + dir * ts), cy - ts / 2.0), vec2(ts, ts));
         if ui.is_rect_visible(r) {
             let tex = match kind {
                 MaskKind::Pixel => l.mask.as_ref().map(|m| app.mask_thumb(ctx, doc, l.id, m)),
@@ -160,7 +165,7 @@ pub fn paint(
             StrokeKind::Outside,
         );
         out.thumbs.push((kind, r));
-        *x += ts + 6.0 + 2.0;
+        *x += dir * (ts + 6.0 + 2.0);
     }
     let rects = (out.thumbs.clone(), out.chains.clone());
     ctx.data_mut(|d| d.get_temp_mut_or_default::<std::collections::HashMap<u64, Rects>>(rects_id()).insert(l.id.0, rects));

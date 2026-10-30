@@ -46,28 +46,33 @@ pub fn panel_rows<'a>(app: &PhotocraftApp, doc: &'a Document) -> Vec<(usize, &'a
     rows
 }
 
-/// The hit area of a group row's triangle starting at `x`.
+/// The hit area of a group row's triangle starting at `x` (mirrored in a right-to-left UI).
 pub fn triangle_rect(row: Rect, x: f32) -> Rect {
-    Rect::from_min_size(pos2(x - 2.0, row.top()), vec2(TRIANGLE_W + 2.0, row.height()))
+    let w = TRIANGLE_W + 2.0;
+    let left = if crate::direction::is_rtl() { x + 2.0 - w } else { x - 2.0 };
+    Rect::from_min_size(pos2(left, row.top()), vec2(w, row.height()))
 }
 
-/// Paint and handle a group row's disclosure triangle at `*x` (advancing it). Returns true when
-/// it was clicked this frame, so the row doesn't also treat the click as a selection.
+/// Paint and handle a group row's disclosure triangle at `*x` (advancing it in reading
+/// direction). Returns true when it was clicked this frame, so the row doesn't also treat the
+/// click as a selection.
 pub fn disclosure(ui: &mut egui::Ui, row: Rect, x: &mut f32, l: &Layer, actions: &mut Vec<(String, Value)>) -> bool {
     let LayerContent::Group(g) = &l.content else { return false };
+    // `x` walks in reading direction; under RTL it decreases and a closed triangle points left.
+    let dir = if crate::direction::is_rtl() { -1.0 } else { 1.0 };
     let hit = triangle_rect(row, *x);
     let resp = ui.interact(hit, ui.scope_id().with(("disclosure", l.id.0)), Sense::click());
     let t = Tokens::get(ui.ctx());
-    let c = pos2(*x + TRIANGLE_W / 2.0 - 1.0, row.center().y);
+    let c = pos2(if dir > 0.0 { *x + TRIANGLE_W / 2.0 - 1.0 } else { *x - (TRIANGLE_W / 2.0 - 1.0) }, row.center().y);
     let s = 3.5;
     let pts = if g.expanded {
         vec![pos2(c.x - s, c.y - s * 0.6), pos2(c.x + s, c.y - s * 0.6), pos2(c.x, c.y + s * 0.6)]
     } else {
-        vec![pos2(c.x - s * 0.6, c.y - s), pos2(c.x + s * 0.6, c.y), pos2(c.x - s * 0.6, c.y + s)]
+        vec![pos2(c.x - dir * s * 0.6, c.y - s), pos2(c.x + dir * s * 0.6, c.y), pos2(c.x - dir * s * 0.6, c.y + s)]
     };
     let color = if resp.hovered() { t.text } else { t.icon };
     ui.painter().add(Shape::convex_polygon(pts, color, Stroke::NONE));
-    *x += TRIANGLE_W;
+    *x += dir * TRIANGLE_W;
     let clicked = resp.clicked();
     if clicked {
         let all = ui.input(|i| i.modifiers.alt);
