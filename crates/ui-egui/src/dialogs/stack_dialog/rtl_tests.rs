@@ -8,9 +8,14 @@ use super::*;
 
 /// The Load Files into Stack dialog over two files, drawn in `dir`: (harness, dialog id).
 fn harness(dir: crate::text::direction::Dir) -> (egui_kittest::Harness<'static, PhotocraftApp>, u64) {
+    harness_with(dir, open)
+}
+
+/// The dialog `opener` opens over two files, drawn in `dir`: (harness, dialog id).
+fn harness_with(dir: crate::text::direction::Dir, opener: fn(&mut PhotocraftApp) -> u64) -> (egui_kittest::Harness<'static, PhotocraftApp>, u64) {
     let _dir = crate::text::direction::direction_scope(dir);
     let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
-    let id = open(&mut app);
+    let id = opener(&mut app);
     if let Some(d) = app.ui.dialog_mut(id) {
         add(&mut d.fields, ["/pictures/a.png".to_owned(), "/pictures/b.png".to_owned()]);
     }
@@ -29,7 +34,14 @@ fn harness(dir: crate::text::direction::Dir) -> (egui_kittest::Harness<'static, 
 fn rects(dir: crate::text::direction::Dir) -> (egui::Rect, egui::Rect, egui::Rect, egui::Rect, egui::Rect, egui::Rect) {
     let (h, id) = harness(dir);
     let win = h.ctx.memory(|m| m.area_rect(egui::Id::unique(("dialog", id)))).expect("the dialog is on screen");
-    (win, h.get_by_label("Use:").rect(), h.get_by_label("Use").rect(), h.get_by_label("a.png").rect(), h.get_by_label("b.png").rect(), h.get_by_label("Browse…").rect())
+    (
+        win,
+        h.get_by_label("Use:").rect(),
+        h.get_by_label("Use").rect(),
+        h.get_by_label("a.png").rect(),
+        h.get_by_label("b.png").rect(),
+        h.get_by_label("Browse…").rect(),
+    )
 }
 
 /// The dialog mirrors: the Use row reads from the right, the file list keeps the reading start
@@ -46,4 +58,18 @@ fn rtl_the_source_files_read_from_the_right() {
     assert!(rtl_a.left() > rtl_browse.right(), "RTL: the list keeps the reading start: {rtl_a:?} vs {rtl_browse:?}");
     assert!((rtl_a.right() - rtl_b.right()).abs() < 1.0, "RTL: the entries hug the list's start edge: {rtl_a:?} vs {rtl_b:?}");
     assert!((rtl_win.width() - ltr_win.width()).abs() < 1.0, "the modal keeps its width: {ltr_win:?} vs {rtl_win:?}");
+}
+
+/// The Statistics dialog's own row mirrors too: its caption leads in reading order.
+#[test]
+fn rtl_the_statistics_stack_mode_row_reads_from_the_right() {
+    let (ltr, _id) = harness_with(crate::text::direction::Dir::Ltr, open_statistics);
+    let ltr_caption = ltr.get_by_label("Choose Stack Mode:").rect();
+    let ltr_mode = ltr.get_by_label("Mode").rect();
+    assert!(ltr_caption.right() < ltr_mode.left(), "LTR: the caption precedes the dropdown: {ltr_caption:?} vs {ltr_mode:?}");
+
+    let (rtl, _id) = harness_with(crate::text::direction::Dir::Rtl, open_statistics);
+    let rtl_caption = rtl.get_by_label("Choose Stack Mode:").rect();
+    let rtl_mode = rtl.get_by_label("Mode").rect();
+    assert!(rtl_caption.left() > rtl_mode.right(), "RTL: the caption leads the dropdown: {rtl_caption:?} vs {rtl_mode:?}");
 }
