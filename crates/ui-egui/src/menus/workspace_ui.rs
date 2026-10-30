@@ -386,7 +386,7 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
         let alt = crate::shortcuts::pretty("Alt");
         crate::analysis_ui::panel_window(app, ctx, "modifier-keys", tl!("Modifier Keys"), vec2(-420.0, 80.0), 150.0, |ui| {
             close = crate::analysis_ui::title_row(ui, tl!("Modifier Keys"));
-            ui.with_layout(crate::text::direction::row(), |ui| {
+            ui.horizontal(|ui| {
                 for (label, on) in [(&*shift, &mut s.sticky_shift), (&*cmd, &mut s.sticky_command), (&*alt, &mut s.sticky_alt)] {
                     if ui.add(egui::Button::new(RichText::new(label).size(14.0)).selected(*on).min_size(vec2(40.0, 30.0))).clicked() {
                         *on = !*on;
@@ -416,7 +416,7 @@ fn dialog(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 crate::widgets::hairline(ui);
                 ui.add_space(6.0);
                 let text = |ui: &mut egui::Ui, f: &mut Map<String, Value>, key: &str, label: &str| {
-                    ui.with_layout(crate::text::direction::row(), |ui| {
+                    ui.horizontal(|ui| {
                         ui.label(RichText::new(tl!(&label)).color(t.text_dim).size(11.0));
                         let mut v = f.get(key).and_then(Value::as_str).unwrap_or("").to_string();
                         if ui.add(egui::TextEdit::singleline(&mut v).desired_width(180.0)).accessible_name(tl!(label)).changed() {
@@ -431,7 +431,7 @@ fn dialog(app: &mut PhotocraftApp, ctx: &egui::Context) {
                     }
                 };
                 let number = |ui: &mut egui::Ui, f: &mut Map<String, Value>, key: &str, label: &str, range: std::ops::RangeInclusive<f32>| {
-                    ui.with_layout(crate::text::direction::row(), |ui| {
+                    ui.horizontal(|ui| {
                         ui.label(RichText::new(tl!(&label)).color(t.text_dim).size(11.0));
                         let mut v = f.get(key).and_then(Value::as_f64).unwrap_or(0.0) as f32;
                         if crate::widgets::slider(ui, &mut v, range.clone(), None).changed()
@@ -832,12 +832,19 @@ mod tests {
             } else {
                 assert!(label.center().x < field.center().x, "LTR: {label:?} vs {field:?}");
             }
+            let win = h.ctx.memory(|m| m.area_rect(egui::Id::unique("shell-dialog"))).unwrap();
+            assert!(
+                field.top() - win.top() < 80.0,
+                "dir={dir:?}: the Name row sits under the title, not centred in the body: {field:?} in {win:?}"
+            );
             let ok = h.get_by_label("OK").rect();
             let cancel = h.get_by_label("Cancel").rect();
             if rtl {
                 assert!(ok.center().x > cancel.center().x, "RTL footer mirrors: {ok:?} vs {cancel:?}");
+                assert!(cancel.left() - win.left() < 40.0, "RTL footer hugs the reading end (left): {cancel:?} in {win:?}");
             } else {
                 assert!(ok.center().x < cancel.center().x, "LTR footer: {ok:?} vs {cancel:?}");
+                assert!(win.right() - cancel.right() < 40.0, "LTR footer hugs the reading end (right): {cancel:?} in {win:?}");
             }
         }
     }
@@ -865,6 +872,11 @@ mod tests {
             } else {
                 assert!(shift.center().x < alt.center().x, "LTR: {shift:?} vs {alt:?}");
             }
+            let win = h.ctx.memory(|m| m.area_rect(egui::Id::unique("modifier-keys"))).unwrap();
+            assert!(
+                shift.top() - win.top() < 80.0,
+                "dir={dir:?}: the button row sits under the title, not centred in the panel: {shift:?} in {win:?}"
+            );
         }
     }
 }
