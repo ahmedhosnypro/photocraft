@@ -222,13 +222,16 @@ mod rtl_tests {
             .unwrap_or_else(|| panic!("the painted `{text}`"))
     }
 
-    /// The painted box of the icon image inside `within`.
+    /// The painted box of the textured mesh (an icon image) inside `within`.
     fn painted_icon(h: &Harness<'_, ()>, within: egui::Rect) -> egui::Rect {
         h.output()
             .shapes
             .iter()
             .filter_map(|shape| match &shape.shape {
-                egui::Shape::Image(img) if img.rect.intersects(within) => Some(img.rect),
+                egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default() => {
+                    let r = m.calc_bounds();
+                    r.intersects(within).then_some(r)
+                }
                 _ => None,
             })
             .next()
