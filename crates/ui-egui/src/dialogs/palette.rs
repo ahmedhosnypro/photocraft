@@ -148,7 +148,10 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                     ui.set_width(width);
                     let qid = egui::Id::unique("palette-query");
                     let mut q: String = ui.data_mut(|d| d.get_temp(qid).unwrap_or_default());
-                    ui.horizontal(|ui| {
+                    // The search row mirrors in a right-to-left UI. The size is the one
+                    // `ui.horizontal` would allocate, so the left-to-right geometry is unchanged.
+                    let row_size = vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y);
+                    ui.allocate_ui_with_layout(row_size, crate::direction::row(), |ui| {
                         let (r, _) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::hover());
                         icons::paint(ui, r, "search", 16.0, t.text_dim);
                         let te = egui::TextEdit::singleline(&mut q)
@@ -210,15 +213,17 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                     if hits.is_empty() {
                         ui.label(RichText::new(tl!("No matching commands")).color(t.text_faint));
                     }
+                    let rtl = crate::direction::is_rtl();
                     for (i, (_, id, label, detail, enabled)) in hits.iter().enumerate() {
                         let (rect, resp) = ui.allocate_exact_size(vec2(width, 32.0), Sense::click());
                         if i == sel || resp.hovered() {
                             ui.painter().rect_filled(rect, t.radius_sm, if i == sel { t.accent_soft } else { t.hover });
                         }
                         let color = if *enabled { t.text } else { t.text_faint };
-                        ui.painter().text(rect.left_center() + vec2(12.0, 0.0), Align2::LEFT_CENTER, label, theme::medium(13.0), color);
+                        let (l_pos, l_align, d_pos, d_align) = hit_row_anchors(rect, rtl);
+                        ui.painter().text(l_pos, l_align, label, theme::medium(13.0), color);
                         if let Some(d) = detail {
-                            ui.painter().text(rect.right_center() - vec2(12.0, 0.0), Align2::RIGHT_CENTER, d, egui::FontId::proportional(11.5), t.text_faint);
+                            ui.painter().text(d_pos, d_align, d, egui::FontId::proportional(11.5), t.text_faint);
                         }
                         if resp.clicked() && *enabled {
                             run = Some(id.clone());
@@ -255,6 +260,16 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
         } else if let Err(e) = crate::menus::invoke(app, ctx, &id, serde_json::json!({})) {
             app.ui.status = e;
         }
+    }
+}
+
+/// The anchors of a hit row's label and detail: the label sits at the reading-start edge and the
+/// detail at the reading-end edge, each inset 12 px from the row's edge.
+fn hit_row_anchors(rect: egui::Rect, rtl: bool) -> (egui::Pos2, Align2, egui::Pos2, Align2) {
+    if rtl {
+        (rect.right_center() - vec2(12.0, 0.0), Align2::RIGHT_CENTER, rect.left_center() + vec2(12.0, 0.0), Align2::LEFT_CENTER)
+    } else {
+        (rect.left_center() + vec2(12.0, 0.0), Align2::LEFT_CENTER, rect.right_center() - vec2(12.0, 0.0), Align2::RIGHT_CENTER)
     }
 }
 
@@ -406,5 +421,88 @@ mod tests {
             h.run_steps(3);
             assert!(h.state().ui.dialogs.iter().all(|d| d.id != dialog), "a second Enter closes the dialog as its OK (with_doc={with_doc})");
         }
+    }
+
+    /// RTL: the hit row's hand-painted composition mirrors — the command label anchors to the
+    /// row's reading-start edge and the shortcut detail to the reading-end edge.
+    #[test]
+    fn hit_row_anchors_mirror_under_rtl() {
+        let rect = egui::Rect::from_min_size(egui::pos2(100.0, 200.0), egui::vec2(560.0, 32.0));
+        let (label, label_align, detail, detail_align) = super::hit_row_anchors(rect, false);
+        assert_eq!(label, egui::pos2(rect.left() + 12.0, rect.center().y));
+        assert_eq!(label_align, egui::Align2::LEFT_CENTER);
+        assert_eq!(detail, egui::pos2(rect.right() - 12.0, rect.center().y));
+        assert_eq!(detail_align, egui::Align2::RIGHT_CENTER);
+        let (label, label_align, detail, detail_align) = super::hit_row_anchors(rect, true);
+        assert_eq!(label, egui::pos2(rect.right() - 12.0, rect.center().y));
+        assert_eq!(label_align, egui::Align2::RIGHT_CENTER);
+        assert_eq!(detail, egui::pos2(rect.left() + 12.0, rect.center().y));
+        assert_eq!(detail_align, egui::Align2::LEFT_CENTER);
+    }
+
+    /// RTL: the painted hit rows mirror — each row's command label sits at the row's right edge
+    /// and its shortcut detail at the left (LTR: label left, detail right), on the same rows.
+    #[test]
+    fn hit_rows_mirror_under_rtl() {
+        /// The label and detail text rects of the painted palette rows, paired row by row. The
+        /// two are told apart by their font size: labels are 13-pt medium, details 11.5-pt.
+        fn rows(rtl: bool) -> Vec<(egui::Rect, egui::Rect)> {
+            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+            let ctx = egui::Context::default();
+            crate::theme::install_fonts(&ctx);
+            // Fonts bind on the next pass (as in open_palette_interrupts_the_ime_only_when_it_takes_focus).
+            let mut warmup = ctx.run_ui(Default::default(), |_| {});
+            warmup.textures_delta.clear();
+            app.ui.palette_open = true;
+            let dir = if rtl { crate::direction::Dir::Rtl } else { crate::direction::Dir::Ltr };
+            let _scope = crate::direction::direction_scope(dir);
+            let mut out = ctx.run_ui(Default::default(), |ui| super::show(&mut app, ui.ctx()));
+            out.textures_delta.clear();
+            let (mut labels, mut details) = (Vec::new(), Vec::new());
+            for shape in &out.shapes {
+                if let egui::Shape::Text(text) = &shape.shape {
+                    let size = text.galley.job.sections.first().map_or(0.0, |s| s.format.font_id.size);
+                    if size == 13.0 {
+                        labels.push(text.visual_bounding_rect());
+                    } else if size == 11.5 {
+                        details.push(text.visual_bounding_rect());
+                    }
+                }
+            }
+            labels.into_iter().zip(details).collect()
+        }
+        let ltr = rows(false);
+        let rtl = rows(true);
+        assert!(ltr.len() >= 8, "the palette paints its default hit list: {} rows", ltr.len());
+        assert_eq!(rtl.len(), ltr.len(), "the palette paints the same hit list in RTL");
+        for (i, ((l_label, l_detail), (r_label, r_detail))) in ltr.iter().zip(&rtl).enumerate() {
+            assert!((l_label.center().y - r_label.center().y).abs() < 0.5, "row {i} keeps its place in both directions");
+            assert!((l_label.center().y - l_detail.center().y).abs() < 1.0, "row {i}'s label and detail share the row");
+            assert!(l_label.right() < l_detail.left(), "LTR: row {i}'s label sits left of its detail");
+            assert!(r_label.left() > r_detail.right(), "RTL: row {i}'s label sits right of its detail");
+        }
+    }
+
+    /// The palette keeps its place and its commands in both directions.
+    #[test]
+    fn palette_keeps_its_place_under_rtl() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        // Fonts bind on the next pass (as in open_palette_interrupts_the_ime_only_when_it_takes_focus).
+        let mut warmup = ctx.run_ui(Default::default(), |_| {});
+        warmup.textures_delta.clear();
+        app.ui.palette_open = true;
+        let mut area = |rtl: bool| {
+            let dir = if rtl { crate::direction::Dir::Rtl } else { crate::direction::Dir::Ltr };
+            let _scope = crate::direction::direction_scope(dir);
+            let mut out = ctx.run_ui(Default::default(), |ui| super::show(&mut app, ui.ctx()));
+            out.textures_delta.clear();
+            ctx.memory(|m| m.area_rect(egui::Id::unique("palette")))
+        };
+        let rtl = area(true).expect("the palette is shown in RTL");
+        let ltr = area(false).expect("the palette is shown in LTR");
+        assert!(rtl.intersects(ctx.content_rect()), "the RTL palette stays on screen");
+        assert_eq!(rtl, ltr, "the palette keeps its place in both directions");
     }
 }
