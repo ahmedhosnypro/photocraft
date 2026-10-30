@@ -157,6 +157,13 @@ fn num(f: &Map<String, Value>, k: &str, d: f64) -> f32 {
 /// The dialog body, in Photoshop's layout: the pattern with Snap to Origin beside it, then
 /// Angle, Scale and Link with Layer.
 pub(crate) fn body(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
+    // One direction-aware body: in a left-to-right UI the layout is egui's default, so nothing
+    // moves; in a right-to-left one the blocks hug the reading start and every row mirrors.
+    ui.with_layout(crate::direction::body_layout(), |ui| body_fields(app, ui, f));
+}
+
+/// The Pattern Fill dialog's fields.
+fn body_fields(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     ui.spacing_mut().item_spacing.y = 6.0;
     ui.horizontal(|ui| {
         let pat = f.get("pattern").and_then(Value::as_str).unwrap_or_default().to_string();
@@ -191,3 +198,56 @@ pub(crate) fn body(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, V
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod rtl_tests {
+    use super::*;
+    use crate::direction::Dir;
+    use egui_kittest::kittest::Queryable;
+
+    /// The Pattern Fill body drawn in `dir`.
+    fn harness(dir: Dir) -> egui_kittest::Harness<'static, (PhotocraftApp, Map<String, Value>)> {
+        let _dir = crate::direction::direction_scope(dir);
+        let mut fields = Map::new();
+        fields.insert("pattern".into(), json!(""));
+        let app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        let mut h = egui_kittest::Harness::builder()
+            .with_size(egui::vec2(420.0, 320.0))
+            .with_context_setup(|ctx| PhotocraftApp::setup_context(ctx, crate::theme::ThemeKind::ALL[0]))
+            .build_ui_state(|ui, s: &mut (PhotocraftApp, Map<String, Value>)| body(&s.0, ui, &mut s.1), (app, fields));
+        h.run_steps(3);
+        h
+    }
+
+    /// The first row reads from the right in a right-to-left UI: the pattern swatch keeps the
+    /// reading start and the Snap to Origin button moves to the reading end.
+    #[test]
+    fn the_pattern_row_mirrors_in_a_right_to_left_ui() {
+        let ltr = harness(Dir::Ltr);
+        let rtl = harness(Dir::Rtl);
+
+        let ltr_pattern = ltr.get_by_role_and_label(egui::accesskit::Role::Button, "Patterns").rect();
+        let ltr_snap = ltr.get_by_label("Snap to Origin").rect();
+        assert!(ltr_snap.left() > ltr_pattern.right(), "LTR: the button follows the swatch: {ltr_pattern:?} {ltr_snap:?}");
+
+        let rtl_pattern = rtl.get_by_role_and_label(egui::accesskit::Role::Button, "Patterns").rect();
+        let rtl_snap = rtl.get_by_label("Snap to Origin").rect();
+        assert!(rtl_snap.right() < rtl_pattern.left(), "RTL: the row mirrors: {rtl_pattern:?} {rtl_snap:?}");
+    }
+
+    /// The blocks hug the reading start of the column: the swatch and the Link with Layer
+    /// caption share the left edge in LTR and the right edge in RTL.
+    #[test]
+    fn the_blocks_hug_the_reading_start() {
+        let ltr = harness(Dir::Ltr);
+        let rtl = harness(Dir::Rtl);
+
+        let ltr_pattern = ltr.get_by_role_and_label(egui::accesskit::Role::Button, "Patterns").rect();
+        let ltr_link = ltr.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Link with Layer").rect();
+        assert!(ltr_link.left() > ltr_pattern.left() && ltr_link.left() - ltr_pattern.left() < 40.0, "LTR: the caption follows the swatch: {ltr_pattern:?} {ltr_link:?}");
+
+        let rtl_pattern = rtl.get_by_role_and_label(egui::accesskit::Role::Button, "Patterns").rect();
+        let rtl_link = rtl.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Link with Layer").rect();
+        assert!(rtl_link.right() < rtl_pattern.right() && rtl_pattern.right() - rtl_link.right() < 40.0, "RTL: the blocks end at the right: {rtl_pattern:?} {rtl_link:?}");
+    }
+}
