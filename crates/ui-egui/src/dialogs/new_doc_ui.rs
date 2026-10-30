@@ -523,9 +523,21 @@ fn save_preset(app: &mut crate::PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<St
     }
 }
 
+/// The dialog body. The host no longer wraps modal bodies in an RTL scope, so this dialog
+/// mirrors its own blocks and rows.
+///
 /// Returns whether a preset double-click requested creation, after applying its settings.
 /// A recent category click can make egui count the preset double-click as a triple-click.
 pub fn body(app: &mut crate::PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) -> bool {
+    let mut create = false;
+    crate::direction::window_body(ui, |ui| {
+        create = body_blocks(app, ui, f);
+    });
+    create
+}
+
+/// The New Document blocks: the category tabs, the preset grid and the preset details.
+fn body_blocks(app: &mut crate::PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) -> bool {
     let t = Tokens::get(ui.ctx());
     // Headings and field labels are static, as in Photoshop: no text cursor over them, no
     // drag-selecting them (#8331). Text fields keep theirs.
@@ -566,8 +578,8 @@ pub fn body(app: &mut crate::PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<Strin
         .collect();
     let chosen = get_s(f, "__preset", "");
     ui.horizontal_top(|ui| {
-        // Left: preset grid.
-        ui.vertical(|ui| {
+        // Presets column, at the reading start.
+        ui.scope_builder(egui::UiBuilder::new().layout(crate::direction::body_layout()), |ui| {
             ui.set_width(520.0);
             if cat == "Saved" {
                 create |= saved_presets(app, ui, f);
@@ -639,8 +651,8 @@ pub fn body(app: &mut crate::PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<Strin
             });
         });
         ui.add_space(10.0);
-        // Right: Preset Details.
-        ui.vertical(|ui| {
+        // Preset Details column, at the reading end.
+        ui.scope_builder(egui::UiBuilder::new().layout(crate::direction::body_layout()), |ui| {
             ui.set_width(260.0);
             ui.label(RichText::new(tl!("PRESET DETAILS")).size(11.0).color(t.text_faint));
             ui.add_space(4.0);
