@@ -211,7 +211,9 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                     }
                     sel = sel.min(hits.len().saturating_sub(1));
                     if hits.is_empty() {
-                        ui.label(RichText::new(tl!("No matching commands")).color(t.text_faint));
+                        crate::direction::dialog_row(ui, |ui| {
+                            ui.label(RichText::new(tl!("No matching commands")).color(t.text_faint));
+                        });
                     }
                     let rtl = crate::direction::is_rtl();
                     for (i, (_, id, label, detail, enabled)) in hits.iter().enumerate() {
@@ -239,11 +241,13 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                         app.ui.palette_open = false;
                     }
                     ui.add_space(4.0);
-                    ui.label(
-                        RichText::new(crate::i18n::fmt(tl!("↑↓ navigate   {key} run   esc close"), &[("key", &crate::shortcuts::pretty("Enter"))]))
-                            .small()
-                            .color(t.text_faint),
-                    );
+                    crate::direction::dialog_row(ui, |ui| {
+                        ui.label(
+                            RichText::new(crate::i18n::fmt(tl!("↑↓ navigate   {key} run   esc close"), &[("key", &crate::shortcuts::pretty("Enter"))]))
+                                .small()
+                                .color(t.text_faint),
+                        );
+                    });
                     ui.data_mut(|d| {
                         d.insert_temp(qid, q);
                         d.insert_temp(sel_id, sel);
@@ -496,13 +500,40 @@ mod tests {
         let mut area = |rtl: bool| {
             let dir = if rtl { crate::direction::Dir::Rtl } else { crate::direction::Dir::Ltr };
             let _scope = crate::direction::direction_scope(dir);
-            let mut out = ctx.run_ui(Default::default(), |ui| super::show(&mut app, ui.ctx()));
-            out.textures_delta.clear();
+            // Two frames per direction so both are measured in the steady state.
+            for _ in 0..2 {
+                let mut out = ctx.run_ui(Default::default(), |ui| super::show(&mut app, ui.ctx()));
+                out.textures_delta.clear();
+            }
             ctx.memory(|m| m.area_rect(egui::Id::unique("palette")))
         };
         let rtl = area(true).expect("the palette is shown in RTL");
         let ltr = area(false).expect("the palette is shown in LTR");
         assert!(rtl.intersects(ctx.content_rect()), "the RTL palette stays on screen");
         assert_eq!(rtl, ltr, "the palette keeps its place in both directions");
+    }
+
+    #[test]
+    fn debug_palette_shapes() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let mut warmup = ctx.run_ui(Default::default(), |_| {});
+        warmup.textures_delta.clear();
+        app.ui.palette_open = true;
+        let mut out = ctx.run_ui(Default::default(), |ui| super::show(&mut app, ui.ctx()));
+        out.textures_delta.clear();
+        eprintln!("content_rect={:?} shapes={}", ctx.content_rect(), out.shapes.len());
+        for s in &out.shapes {
+            if let egui::Shape::Text(t) = &s.shape {
+                eprintln!(
+                    "TEXT size={} rect={:?} text={:?}",
+                    t.galley.job.sections.first().map_or(-1.0, |s| s.format.font_id.size),
+                    t.visual_bounding_rect(),
+                    t.galley.job.text
+                );
+            }
+        }
+        panic!("debug");
     }
 }
