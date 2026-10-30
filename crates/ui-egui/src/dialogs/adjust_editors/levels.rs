@@ -105,6 +105,7 @@ fn levels_body(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     let w = ui.available_width().min(300.0);
     // Histogram.
     let (hr, _) = ui.allocate_exact_size(vec2(w, 110.0), Sense::hover());
+    ui.data_mut(|d| d.insert_temp(cx.mem.with("levels-hist"), hr));
     let hr = hr.shrink2(vec2(6.0, 0.0));
     let p = ui.painter_at(hr.expand(1.0));
     p.rect_filled(hr, 0.0, t.field);
@@ -114,6 +115,7 @@ fn levels_body(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     p.rect_stroke(hr, 0.0, Stroke::new(1.0, t.field_border), StrokeKind::Inside);
     // Input sliders: black, gamma, white.
     let (sr, sresp) = ui.allocate_exact_size(vec2(w, 14.0), Sense::click_and_drag());
+    ui.data_mut(|d| d.insert_temp(cx.mem.with("levels-input-track"), sr));
     let track = sr.shrink2(vec2(6.0, 0.0));
     let xpos = |val: f32| track.left() + val / 255.0 * track.width();
     let xval = |x: f32| ((x - track.left()) / track.width() * 255.0).clamp(0.0, 255.0);
@@ -176,6 +178,7 @@ fn levels_body(ui: &mut egui::Ui, v: &mut Value, cx: &EditorCx) -> Edit {
     let (ob_r, _) = ui.allocate_exact_size(vec2(w, 10.0), Sense::hover());
     gradient_bar(ui.painter(), ob_r.shrink2(vec2(6.0, 0.0)), Color32::BLACK, bar_color(&chan, &t), false);
     let (or, oresp) = ui.allocate_exact_size(vec2(w, 14.0), Sense::click_and_drag());
+    ui.data_mut(|d| d.insert_temp(cx.mem.with("levels-output-track"), or));
     let otrack = or.shrink2(vec2(6.0, 0.0));
     let oxpos = |val: f32| otrack.left() + val / 255.0 * otrack.width();
     let oval = |x: f32| ((x - otrack.left()) / otrack.width() * 255.0).clamp(0.0, 255.0);
@@ -234,9 +237,15 @@ mod tests {
 
     /// The Levels panel over a fresh adjustment, drawn in `dir`.
     fn harness(dir: Dir) -> egui_kittest::Harness<'static, Value> {
-        let _dir = crate::direction::direction_scope(dir);
         let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(380.0, 420.0)).build_ui_state(
-            |ui, v: &mut Value| {
+            move |ui, v: &mut Value| {
+                // The scope covers every frame, including the frames of a later gesture: the
+                // guard would otherwise die when this function returns.
+                let _dir = crate::direction::direction_scope(dir);
+                // The fonts install after the harness's first frame; skip that one.
+                if !ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    return;
+                }
                 let cx = EditorCx {
                     mem: egui::Id::unique("levels-rtl"),
                     hist: None,
@@ -261,6 +270,12 @@ mod tests {
         let mut rs: Vec<egui::Rect> = h.query_all_by_label(name).map(|n| n.rect()).collect();
         rs.sort_by(|a, b| a.top().total_cmp(&b.top()));
         rs
+    }
+
+    /// The rect the panel reports for `key` under its memory id.
+    fn reported(h: &egui_kittest::Harness<'_, Value>, key: &str) -> egui::Rect {
+        let id = egui::Id::unique("levels-rtl").with(key);
+        h.ctx.data(|d| d.get_temp::<egui::Rect>(id)).expect("the panel reports its rect")
     }
 
     /// The Levels panel mirrors its chrome in a right-to-left UI: the Auto button moves to the
@@ -303,5 +318,29 @@ mod tests {
         let rtl_label = named(&rtl, "Output Levels:")[0];
         assert!(ltr_label.left() <= ltr_black.left() + 6.0, "the caption starts at the left in LTR: {ltr_label:?}");
         assert!(rtl_label.right() >= rtl_white.right() - 6.0, "the caption starts at the right in RTL: {rtl_label:?}");
+
+        // The histogram and the tracks keep their physical geometry: same width, moved with
+        // the block to the reading start.
+        let ltr_hist = reported(&ltr, "levels-hist");
+        let rtl_hist = reported(&rtl, "levels-hist");
+        assert!((ltr_hist.width() - rtl_hist.width()).abs() < 1.0, "the histogram keeps its width: {ltr_hist:?} {rtl_hist:?}");
+        assert!(rtl_hist.left() > ltr_hist.left(), "the histogram moves with the block: {ltr_hist:?} {rtl_hist:?}");
+
+        let ltr_track = reported(&ltr, "levels-input-track");
+        let rtl_track = reported(&rtl, "levels-input-track");
+        assert!((ltr_track.width() - rtl_track.width()).abs() < 1.0, "the track keeps its width: {ltr_track:?} {rtl_track:?}");
+        assert!(rtl_track.left() > ltr_track.left(), "the track moves with the block: {ltr_track:?} {rtl_track:?}");
+
+        let ltr_otrack = reported(&ltr, "levels-output-track");
+        let rtl_otrack = reported(&rtl, "levels-output-track");
+        assert!((ltr_otrack.width() - rtl_otrack.width()).abs() < 1.0, "the output track keeps its width: {ltr_otrack:?} {rtl_otrack:?}");
+        assert!(rtl_otrack.left() > ltr_otrack.left(), "the output track moves with the block: {ltr_otrack:?} {rtl_otrack:?}");
+
+        // The fields stay under their handles: the black field's physical offset from the
+        // track's left edge is the same in both directions.
+        assert!(
+            (rtl_black.left() - rtl_track.left() - (ltr_black.left() - ltr_track.left())).abs() < 1.0,
+            "the fields stay under their handles: {ltr_black:?} {ltr_track:?} {rtl_black:?} {rtl_track:?}"
+        );
     }
 }
