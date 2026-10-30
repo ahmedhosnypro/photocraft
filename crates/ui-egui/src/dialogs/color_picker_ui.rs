@@ -895,8 +895,14 @@ mod rtl_tests {
         let (rf, rok, rcancel, rcur) = picker_frame(crate::direction::Dir::Rtl);
         assert!((rf.width() - lf.width()).abs() < 1.0, "the frame keeps its width: {rf:?} vs {lf:?}");
         assert!((lok.left() - lcancel.left()).abs() < 1.0 && (rok.left() - rcancel.left()).abs() < 1.0, "a flush stack in both directions: {lok:?} {rok:?}");
-        assert!((rok.left() - rf.left() - (lf.right() - lok.right())).abs() < 2.0, "the stack hugs the reading end in RTL, the mirror of LTR: {rok:?} in {rf:?} vs {lok:?} in {lf:?}");
-        assert!((rcur.center().x - (rf.left() + rf.right() - lcur.center().x)).abs() < 2.0, "the swatch pair mirrors to the reading start: {rcur:?} in {rf:?} vs {lcur:?} in {lf:?}");
+        assert!(
+            (rok.left() - rf.left() - (lf.right() - lok.right())).abs() < 2.0,
+            "the stack hugs the reading end in RTL, the mirror of LTR: {rok:?} in {rf:?} vs {lok:?} in {lf:?}"
+        );
+        assert!(
+            (rcur.center().x - (rf.left() + rf.right() - lcur.center().x)).abs() < 2.0,
+            "the swatch pair mirrors to the reading start: {rcur:?} in {rf:?} vs {lcur:?} in {lf:?}"
+        );
         assert!(rok.right() < rcur.left(), "the stack reads after the swatches: {rok:?} vs {rcur:?}");
     }
 }
