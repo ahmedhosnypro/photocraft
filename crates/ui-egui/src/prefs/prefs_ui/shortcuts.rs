@@ -177,6 +177,7 @@ pub(crate) fn capture_key_press(capture_mods: egui::Modifiers, i: &egui::InputSt
 /// (click a shortcut, press keys; ⌫ removes it), menu visibility and colours, toolbar tools.
 pub(super) fn shortcuts_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     let t = Tokens::get(ui.ctx());
+    let rtl = crate::direction::is_rtl();
     let mut tab = f.get("tab").and_then(Value::as_u64).unwrap_or(0);
     ui.horizontal(|ui| {
         for (i, name) in [tl!("Keyboard Shortcuts"), tl!("Menus"), tl!("Toolbar")].iter().enumerate() {
@@ -327,7 +328,12 @@ pub(super) fn shortcuts_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut
     let needle = filter.to_ascii_lowercase();
     egui::ScrollArea::vertical().max_height(420.0).id_salt("shortcuts-scroll").show(ui, |ui| {
         let mut last_top = String::new();
-        egui::Grid::new("shortcut-grid").num_columns(3).spacing([12.0, 3.0]).striped(true).show(ui, |ui| {
+        // The fork's grid cannot place its first row under a right-to-left cursor (x = -inf),
+        // so the table runs in an explicit left-to-right scope; the cells below are emitted in
+        // reading order, and the block itself stays at the scroll area's left edge.
+        let mut grid_ui =
+            ui.new_child(egui::UiBuilder::new().max_rect(ui.max_rect()).layout(egui::Layout::top_down(egui::Align::Min)));
+        egui::Grid::new("shortcut-grid").num_columns(3).spacing([12.0, 3.0]).striped(true).show(&mut grid_ui, |ui| {
             for (id, label, path, def) in &items {
                 if tab == 1 && crate::tool_shortcuts::tool(id).is_some() {
                     continue;
@@ -348,7 +354,6 @@ pub(super) fn shortcuts_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut
                 let top = shown_path.first().cloned().unwrap_or_else(|| tl!("Other").into());
                 // Grid columns always advance left to right, so a mirrored row emits its cells
                 // in reverse: the header label sits in the reading-start column.
-                let rtl = crate::direction::is_rtl();
                 if top != last_top {
                     let header = |ui: &mut egui::Ui| ui.label(RichText::new(&top).font(crate::theme::semibold(12.5)).color(t.text));
                     if rtl {
@@ -389,7 +394,8 @@ pub(super) fn shortcuts_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut
                     // lists them as rows of their own (#3665).
                     let alts_cell = |ui: &mut egui::Ui| -> Vec<(egui::Response, String)> {
                         let mut buttons = Vec::new();
-                        ui.horizontal(|ui| {
+                        // The grid scope above is left-to-right; this row keeps its own reading order.
+                        ui.allocate_ui_with_layout(ui.available_size_before_wrap(), crate::direction::row(), |ui| {
                             for k in &alts {
                                 let b = egui::Button::new(RichText::new(format!("{}  ×", crate::shortcuts::pretty(k))).size(11.0).color(t.text)).small();
                                 buttons.push((ui.add(b).on_hover_text(tl!("Delete Shortcut")), k.clone()));
@@ -439,7 +445,11 @@ pub(super) fn shortcuts_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut
                     let hideable = photocraft_engine::prefs::MenuCustomization::hideable(id);
                     let mut visible = !hideable || !hidden.contains(id);
                     let visible_cell = |ui: &mut egui::Ui, visible: &mut bool| {
-                        ui.add_enabled_ui(hideable, |ui| crate::widgets::checkbox(ui, visible, tl!("Visible"))).response
+                        // The grid scope above is left-to-right; the checkbox keeps the reading-start side.
+                        ui.allocate_ui_with_layout(ui.available_size_before_wrap(), crate::direction::row(), |ui| {
+                            ui.add_enabled_ui(hideable, |ui| crate::widgets::checkbox(ui, visible, tl!("Visible"))).response
+                        })
+                        .inner
                     };
                     let mut col = colors.get(id).cloned().unwrap_or_else(|| "none".into());
                     let opts: Vec<(String, &str)> =
@@ -473,6 +483,7 @@ pub(super) fn shortcuts_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut
                 ui.end_row();
             }
         });
+        ui.advance_cursor_after_rect(grid_ui.min_rect());
     });
     ui.add_space(6.0);
     if tab == 0 {
