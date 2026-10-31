@@ -905,4 +905,40 @@ mod tests {
         let (rtl_toggle, rtl_dropdown) = rects(Dir::Rtl);
         assert!(rtl_toggle.center().x > rtl_dropdown.center().x, "RTL order: {rtl_toggle:?} vs {rtl_dropdown:?}");
     }
+
+    fn options_bar_harness_sized(app: PhotocraftApp, width: f32) -> egui_kittest::Harness<'static, PhotocraftApp> {
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(width, 60.0)).build_ui_state(
+            |ui, app: &mut PhotocraftApp| {
+                if !ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    return;
+                }
+                crate::panels::options_bar(app, ui);
+            },
+            app,
+        );
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ProMedium);
+        h.run_steps(4);
+        h
+    }
+
+    #[test]
+    fn probe_strip_geometry_narrow() {
+        use egui_kittest::kittest::Queryable;
+        for dir in [Dir::Ltr, Dir::Rtl] {
+            let _scope = direction_scope(dir);
+            let h = options_bar_harness_sized(app_with(Tool::Brush), 460.0);
+            let mut rects: Vec<(f32, f32, String)> = h
+                .query_all_by_role(egui::accesskit::Role::Button)
+                .map(|n| {
+                    let r = n.rect();
+                    (r.min.x, r.max.x, format!("{n:?}").chars().take(70).collect())
+                })
+                .collect();
+            rects.sort_by(|a, b| a.0.total_cmp(&b.0));
+            eprintln!("dir={dir:?} width=460");
+            for (min, max, dbg) in &rects {
+                eprintln!("  [{min:7.1},{max:7.1}] {dbg}");
+            }
+        }
+    }
 }
