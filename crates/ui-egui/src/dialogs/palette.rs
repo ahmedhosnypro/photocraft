@@ -481,10 +481,8 @@ mod tests {
             // other 13-pt text in the card (the hint, the warning icon) has no detail beside it.
             let mut rows = Vec::new();
             for (rect, size) in &texts {
-                if *size == 11.5 {
-                    if let Some((label, _)) = texts.iter().find(|(r, s)| *s == 13.0 && (r.center().y - rect.center().y).abs() < 1.0) {
-                        rows.push((*label, *rect));
-                    }
+                if *size == 11.5 && let Some((label, _)) = texts.iter().find(|(r, s)| *s == 13.0 && (r.center().y - rect.center().y).abs() < 1.0) {
+                    rows.push((*label, *rect));
                 }
             }
             rows
