@@ -328,6 +328,25 @@ pub fn menu_row_button<'a>(text: egui::WidgetText, shortcut: Option<String>, rtl
     b
 }
 
+/// One row of any popup menu (a context menu, a flyout, the ruler's unit menu):
+/// `label` behind the fixed-width checkmark column at the row's reading start
+/// ([`menu_row_text`]), `shortcut` at the reading end, in a button that mirrors under a
+/// right-to-left direction — plain `ui.button` lays its atoms left-to-right whatever the
+/// direction flag, so popup bodies use this instead. A row that is neither checked nor in a
+/// right-to-left UI keeps a plain label, pixel-identical to a plain button.
+pub fn menu_row(ui: &mut egui::Ui, label: &str, shortcut: Option<&str>, checked: bool, enabled: bool) -> egui::Response {
+    let rtl = ui.style().right_to_left;
+    let text = if checked || rtl { menu_row_text(ui, checked, label, None, false, GutterSide::ReadingStart) } else { egui::RichText::new(label).into() };
+    // A right-to-left row without a shortcut gets a leading grow, so its label hugs the row's
+    // right edge instead of packing at the left like the button's atoms do.
+    let button = if rtl && shortcut.is_none() {
+        egui::Button::new((egui::Atom::grow(), text))
+    } else {
+        menu_row_button(text, shortcut.map(str::to_string), rtl)
+    };
+    ui.add_enabled(enabled, button)
+}
+
 impl Keys {
     /// Last frame's state.
     pub fn load(ctx: &egui::Context) -> Keys {
@@ -562,6 +581,54 @@ mod tests {
         assert!(!is_command_key(Key::ArrowRight, Modifiers::NONE));
         assert!(!is_command_key(Key::Enter, Modifiers::NONE));
         assert!(!is_command_key(Key::Escape, Modifiers::NONE));
+    }
+
+    /// A popup row built with [`menu_row`]: in a right-to-left body the label hugs the row's
+    /// right edge, the shortcut sits at its left and the checkmark column at the reading start;
+    /// left-to-right keeps a plain button's look (no checkmark column on an unchecked row).
+    #[test]
+    fn menu_row_mirrors_label_shortcut_and_gutter() {
+        use crate::direction::{Dir, direction_scope};
+        // (galley text, galley rect, x of the first glyph of `needle` in that galley)
+        let render = |dir: Dir| -> Vec<(String, egui::Rect, Vec<(char, f32)>)> {
+            let _scope = direction_scope(dir);
+            let ctx = egui::Context::default();
+            ctx.all_styles_mut(|s| s.right_to_left = dir == Dir::Rtl);
+            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                ui.allocate_ui_with_layout(egui::vec2(240.0, 100.0), egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                    menu_row(ui, "Inches", None, false, true);
+                    menu_row(ui, "Pixels", Some("Ctrl+P"), true, true);
+                });
+            });
+            let texts = out
+                .shapes
+                .iter()
+                .filter_map(|cs| match &cs.shape {
+                    egui::Shape::Text(ts) => {
+                        let glyphs = ts.galley.rows.first().map(|r| r.glyphs.iter().map(|g| (g.chr, g.pos.x)).collect()).unwrap_or_default();
+                        Some((ts.galley.text().to_string(), ts.visual_bounding_rect(), glyphs))
+                    }
+                    _ => None,
+                })
+                .collect();
+            out.textures_delta.clear();
+            texts
+        };
+        let at = |v: &[(String, egui::Rect, Vec<(char, f32)>)], s: &str| v.iter().find(|(t, _, _)| t.contains(s)).cloned();
+        let glyph = |v: &[(String, egui::Rect, Vec<(char, f32)>)], s: &str, c: char| at(v, s).and_then(|(_, _, g)| g.iter().find(|(ch, _)| *ch == c).map(|(_, x)| *x));
+        let rtl = render(Dir::Rtl);
+        let (inch, pix, sc) = (at(&rtl, "Inches").unwrap().1, at(&rtl, "Pixels").unwrap().1, at(&rtl, "Ctrl").unwrap().1);
+        assert!(inch.right() > 240.0 - 32.0 && pix.right() > 240.0 - 32.0, "rtl: the labels hug the right edge: {inch:?} {pix:?}");
+        assert!(sc.left() < 32.0, "rtl: the shortcut sits at the left edge: {sc:?}");
+        let (mark, label) = (glyph(&rtl, "Pixels", '✔').unwrap(), glyph(&rtl, "Pixels", 'P').unwrap());
+        assert!(mark > label, "rtl: the checkmark column is at the reading start (right) of the label: {mark} {label}");
+        let ltr = render(Dir::Ltr);
+        let (inch, pix, sc) = (at(&ltr, "Inches").unwrap().1, at(&ltr, "Pixels").unwrap().1, at(&ltr, "Ctrl").unwrap().1);
+        assert!(inch.left() < 32.0, "ltr: an unchecked row keeps its plain label at the left edge (no gutter): {inch:?}");
+        assert!(pix.left() > inch.left(), "ltr: a checked row starts its label after the column: {pix:?} {inch:?}");
+        let (mark, label) = (glyph(&ltr, "Pixels", '✔').unwrap(), glyph(&ltr, "Pixels", 'P').unwrap());
+        assert!(mark < label, "ltr: the checkmark is at the left of the label: {mark} {label}");
+        assert!(sc.right() > 240.0 - 32.0, "ltr: the shortcut sits at the right edge: {sc:?}");
     }
 }
 

@@ -47,7 +47,7 @@ pub fn overflow_button(ui: &mut Ui, id: egui::Id, r: Rect, tip: &str, labels: &[
     crate::icons::paint(&paint_ui, r, "chevrons-right", 16.0, t.text);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), tip));
     let resp = resp.on_hover_text(tip);
-    egui::Popup::menu(&resp).show(|ui| {
+    egui::Popup::menu(&resp).show(|ui| crate::menus::popup_body(ui, |ui| {
         ui.set_min_width(140.0);
         for &i in overflow {
             let Some(name) = labels.get(i) else { continue };
@@ -57,7 +57,7 @@ pub fn overflow_button(ui: &mut Ui, id: egui::Id, r: Rect, tip: &str, labels: &[
                 ui.close();
             }
         }
-    });
+    }));
 }
 
 /// Draw the tabs of a strip in `area` (the strip minus the menu button). `paint_tab` draws one
