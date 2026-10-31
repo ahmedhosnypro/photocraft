@@ -1003,13 +1003,17 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
                     f.get(&p.key).and_then(Value::as_array).map(|a| a.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect()).unwrap_or_default();
                 vals.resize(n, 0.0);
                 ui.label(egui::RichText::new(label(&p.key)).color(t.text_dim));
-                egui::Grid::new(format!("flt-grid-{cmd}-{}", p.key)).spacing([4.0, 4.0]).show(ui, |ui| {
-                    for (i, v) in vals.iter_mut().enumerate() {
-                        crate::widgets::value_field(ui, v, -999.0..=999.0, "", 44.0).accessible_name(format!("{} {}", label(&p.key), i + 1));
-                        if (i + 1) % side == 0 {
-                            ui.end_row();
+                // The fork's `Grid` cannot start under a right-to-left cursor, so the value
+                // cells run in an LTR scope (the grid is data, not a reading row).
+                crate::direction::ltr_vertical(ui, |ui| {
+                    egui::Grid::new(format!("flt-grid-{cmd}-{}", p.key)).spacing([4.0, 4.0]).show(ui, |ui| {
+                        for (i, v) in vals.iter_mut().enumerate() {
+                            crate::widgets::value_field(ui, v, -999.0..=999.0, "", 44.0).accessible_name(format!("{} {}", label(&p.key), i + 1));
+                            if (i + 1) % side == 0 {
+                                ui.end_row();
+                            }
                         }
-                    }
+                    });
                 });
                 f.insert(p.key, json!(vals.iter().map(|v| v.round() as i64).collect::<Vec<_>>()));
             }

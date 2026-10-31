@@ -617,7 +617,10 @@ pub fn clone_source_panel(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     // egui::Grid is direction-blind, so in RTL the cells are emitted in mirrored order
     // (link, W, X — then flip-V, flip-H, A) with the label after its field.
     let rtl = crate::direction::is_rtl();
-    egui::Grid::new("clone-src-grid").num_columns(5).spacing(vec2(6.0, 4.0)).show(ui, |ui| {
+    // The fork's `Grid` cannot start under a right-to-left cursor, so it runs in an LTR scope;
+    // the cells below are emitted in reading order (`rtl`).
+    crate::direction::ltr_vertical(ui, |ui| {
+        egui::Grid::new("clone-src-grid").num_columns(5).spacing(vec2(6.0, 4.0)).show(ui, |ui| {
         if rtl {
             let icon = if slot.linked { "link" } else { "unlink" };
             if crate::icons::button(ui, icon, 22.0, slot.linked, tl!("Maintain aspect ratio")).clicked() {
@@ -704,7 +707,8 @@ pub fn clone_source_panel(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 }
             });
         }
-        ui.end_row();
+            ui.end_row();
+        });
     });
     if let Some(p) = action {
         run(app, "cloneSource.set", p);
