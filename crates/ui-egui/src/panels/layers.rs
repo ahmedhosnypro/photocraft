@@ -574,10 +574,12 @@ pub(super) fn footer_label(command: &str) -> &'static str {
     }
 }
 
-/// The small down-arrow makes it clear that the footer icon expands into a menu.
+/// The small down-arrow makes it clear that the footer icon expands into a menu. It sits at the
+/// button's reading-end bottom corner: the right in a left-to-right UI, the left in a right-to-left one.
 fn footer_menu_arrow(ui: &egui::Ui, rect: Rect) {
     let t = Tokens::get(ui.ctx());
-    let arrow = Rect::from_min_size(rect.right_bottom() - vec2(11.0, 10.0), vec2(9.0, 9.0));
+    let x = if crate::direction::is_rtl() { crate::direction::start_x(rect, 2.0) } else { crate::direction::end_x(rect, 11.0) };
+    let arrow = Rect::from_min_size(pos2(x, rect.bottom() - 10.0), vec2(9.0, 9.0));
     icons::paint(ui, arrow, "chevron-down", 8.0, t.text_dim);
 }
 
