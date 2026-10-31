@@ -120,13 +120,31 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     });
 }
 
+/// A single-line edit whose text reads right-to-left in a right-to-left UI (Arabic names align
+/// to the field's right edge); a left-to-right UI keeps egui's default edit, unchanged.
+fn add_rtl_singleline(ui: &mut egui::Ui, text: &mut String, configure: impl FnOnce(egui::TextEdit<'_>) -> egui::TextEdit<'_>) -> egui::Response {
+    let edit = configure(egui::TextEdit::singleline(text));
+    if !crate::direction::is_rtl() {
+        return ui.add(edit);
+    }
+    let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, _wrap: f32| {
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        let mut job = egui::text::LayoutJob::simple_singleline(buf.as_str().to_owned(), font, ui.visuals().text_color());
+        job.direction = egui::epaint::text::TextDirection::RightToLeft;
+        job.halign = egui::Align::Max;
+        job.keep_trailing_whitespace = true;
+        ui.fonts_mut(|f| f.layout_job(job))
+    };
+    ui.add(edit.align(Align2::RIGHT_CENTER).layouter(&mut layouter))
+}
+
 /// The Channel Options blocks: the name, the mask-indication radios and the colour row.
 fn body_blocks(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     let quick = f.get("channel").and_then(Value::as_str) == Some("quickMask");
     if let Some(mut name) = f.get("name").and_then(Value::as_str).map(str::to_string) {
         ui.horizontal(|ui| {
             label(ui, tl!("Name:"));
-            if ui.add(egui::TextEdit::singleline(&mut name).desired_width(200.0)).accessible_name(tl!("Name")).changed() {
+            if add_rtl_singleline(ui, &mut name, |e| e.desired_width(200.0)).accessible_name(tl!("Name")).changed() {
                 f.insert("name".into(), json!(name));
             }
         });
@@ -251,7 +269,7 @@ pub fn new_spot_body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
         let mut name = f.get("name").and_then(Value::as_str).unwrap_or_default().to_string();
         ui.horizontal(|ui| {
             label(ui, tl!("Name:"));
-            if ui.add(egui::TextEdit::singleline(&mut name).desired_width(200.0)).accessible_name(tl!("Name")).changed() {
+            if add_rtl_singleline(ui, &mut name, |e| e.desired_width(200.0)).accessible_name(tl!("Name")).changed() {
                 f.insert("name".into(), json!(name));
             }
         });
