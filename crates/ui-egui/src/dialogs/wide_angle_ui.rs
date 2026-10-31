@@ -238,7 +238,7 @@ fn constraint_menu(ui: &mut egui::Ui, d: &mut WideAngleDialog) {
     };
     for (o, label) in [(Orientation::Free, tl!("Free")), (Orientation::Horizontal, tl!("Horizontal")), (Orientation::Vertical, tl!("Vertical"))] {
         let current = d.params.constraints.get(i).is_some_and(|c| c.orientation == o);
-        if ui.radio(current, label).clicked() {
+        if crate::menu_keys::menu_row(ui, label, None, current, true).clicked() {
             if let Some(c) = d.params.constraints.get_mut(i) {
                 c.orientation = o;
                 d.dirty = true;
@@ -247,7 +247,7 @@ fn constraint_menu(ui: &mut egui::Ui, d: &mut WideAngleDialog) {
         }
     }
     ui.separator();
-    if ui.button(tl!("Delete")).clicked() {
+    if crate::menu_keys::menu_row(ui, tl!("Delete"), None, false, true).clicked() {
         d.params.constraints.remove(i);
         d.menu_for = None;
         d.dirty = true;
@@ -333,7 +333,9 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 .min_by(|a, b| a.1.total_cmp(&b.1));
             d.menu_for = near.filter(|(_, dist)| *dist < 10.0).map(|(i, _)| i);
         }
-        resp.context_menu(|ui| constraint_menu(ui, d));
+        resp.context_menu(|ui| {
+            crate::menus::popup_body(ui, |ui| constraint_menu(ui, d));
+        });
         let show_src = !d.preview || d.drag.is_some();
         let tex = if show_src { d.src_tex.as_ref() } else { d.out_tex.as_ref() };
         widgets::checker(&painter, img_r, 8.0);
@@ -619,5 +621,50 @@ mod tests {
         h.input_mut().events.push(button(false));
         h.run_steps(2);
         assert!(h.query_by_label("Horizontal").is_some(), "the constraint menu opens over the mirrored preview");
+    }
+
+    /// The constraint menu's rows go through the shared popup body + `menu_row`: under RTL the
+    /// checked row's label hugs the popup's right edge, under LTR the left edge.
+    #[test]
+    fn constraint_menu_rows_mirror_only_under_rtl() {
+        let texts = |dir: crate::direction::Dir| {
+            let _scope = crate::direction::direction_scope(dir);
+            let ctx = egui::Context::default();
+            ctx.all_styles_mut(|s| s.right_to_left = dir == crate::direction::Dir::Rtl);
+            let mut popup = egui::Rect::NOTHING;
+            let mut texts = Vec::new();
+            for _ in 0..3 {
+                let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                    let btn = ui.button("constraint");
+                    let _ = egui::Popup::menu(&btn)
+                        .open_memory(Some(egui::SetOpenCommand::Bool(true)))
+                        .show(|ui| {
+                            crate::menus::popup_body(ui, |ui| {
+                                let _ = crate::menu_keys::menu_row(ui, tl!("Free"), None, false, true);
+                                let _ = crate::menu_keys::menu_row(ui, tl!("Horizontal"), None, true, true);
+                            });
+                        })
+                        .inspect(|r| popup = r.response.rect);
+                });
+                texts = out
+                    .shapes
+                    .iter()
+                    .filter_map(|cs| match &cs.shape {
+                        egui::Shape::Text(ts) => Some((ts.galley.text().to_string(), cs.shape.visual_bounding_rect())),
+                        _ => None,
+                    })
+                    .collect();
+                out.textures_delta.clear();
+            }
+            (popup, texts)
+        };
+        let (rtl_popup, rtl) = texts(crate::direction::Dir::Rtl);
+        let (ltr_popup, ltr) = texts(crate::direction::Dir::Ltr);
+        assert!(rtl_popup.is_positive() && ltr_popup.is_positive(), "the popups opened");
+        let at = |v: &[(String, egui::Rect)], s: &str| v.iter().find(|(t, _)| t.contains(s)).map(|(_, r)| *r).unwrap_or(egui::Rect::NOTHING);
+        let row = at(&rtl, "Horizontal");
+        assert!(rtl_popup.right() - row.right() < 32.0, "rtl: the row label hugs the popup's right edge: {row:?} in {rtl_popup:?}");
+        let row = at(&ltr, "Horizontal");
+        assert!(row.left() - ltr_popup.left() < 32.0, "ltr: the row label hugs the popup's left edge: {row:?} in {ltr_popup:?}");
     }
 }
