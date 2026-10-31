@@ -10,15 +10,12 @@ const WINDOW: f32 = 1280.0;
 
 /// The harness of the left-to-right tests (`tests::harness`): the app over one document.
 fn harness() -> egui_kittest::Harness<'static, PhotocraftApp> {
-    let mut h = egui_kittest::Harness::builder()
-        .with_size(egui::vec2(WINDOW, 800.0))
-        .with_max_steps(64)
-        .build_eframe(|cc| {
-            PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
-            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
-            app.run("file.new", serde_json::json!({"width": 200, "height": 120})).unwrap();
-            app
-        });
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(WINDOW, 800.0)).with_max_steps(64).build_eframe(|cc| {
+        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        app.run("file.new", serde_json::json!({"width": 200, "height": 120})).unwrap();
+        app
+    });
     h.run_steps(6);
     h
 }
@@ -39,14 +36,8 @@ fn rows(dir: crate::text::direction::Dir) -> (egui::Rect, egui::Rect) {
 fn rtl_the_rows_read_from_the_right() {
     let (ltr_drop, ltr_cap) = rows(crate::text::direction::Dir::Ltr);
     let (rtl_drop, rtl_cap) = rows(crate::text::direction::Dir::Rtl);
-    assert!(
-        (ltr_drop.center().x + rtl_drop.center().x - WINDOW).abs() < 2.0,
-        "the Contents dropdown mirrors: {ltr_drop:?} / {rtl_drop:?}"
-    );
-    assert!(
-        (ltr_cap.center().x + rtl_cap.center().x - WINDOW).abs() < 2.0,
-        "the Blending caption mirrors: {ltr_cap:?} / {rtl_cap:?}"
-    );
+    assert!((ltr_drop.center().x + rtl_drop.center().x - WINDOW).abs() < 2.0, "the Contents dropdown mirrors: {ltr_drop:?} / {rtl_drop:?}");
+    assert!((ltr_cap.center().x + rtl_cap.center().x - WINDOW).abs() < 2.0, "the Blending caption mirrors: {ltr_cap:?} / {rtl_cap:?}");
     // The row hugs the reading-start edge of the dialog, so mirroring carries the dropdown
     // across the window's centre line: its RTL centre is right of its LTR one.
     assert!(rtl_drop.center().x > ltr_drop.center().x, "the dropdown mirrors: {ltr_drop:?} / {rtl_drop:?}");

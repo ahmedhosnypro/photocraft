@@ -136,11 +136,7 @@ pub fn confirm(app: &mut PhotocraftApp, f: &Map<String, Value>) -> Result<Value,
 /// A caption in a fixed column that hugs the field it names: the box's right edge in a
 /// left-to-right UI, its left edge in a right-to-left one.
 fn caption_anchor(r: egui::Rect, rtl: bool) -> (egui::Pos2, Align2) {
-    if rtl {
-        (pos2(r.left() + 6.0, r.center().y), Align2::LEFT_CENTER)
-    } else {
-        (pos2(r.right() - 6.0, r.center().y), Align2::RIGHT_CENTER)
-    }
+    if rtl { (pos2(r.left() + 6.0, r.center().y), Align2::LEFT_CENTER) } else { (pos2(r.right() - 6.0, r.center().y), Align2::RIGHT_CENTER) }
 }
 
 /// Paints the caption; returns its box so tests can assert where it landed.
