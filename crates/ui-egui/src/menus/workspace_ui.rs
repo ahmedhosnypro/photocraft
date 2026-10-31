@@ -833,10 +833,7 @@ mod tests {
                 assert!(label.center().x < field.center().x, "LTR: {label:?} vs {field:?}");
             }
             let win = h.ctx.memory(|m| m.area_rect(egui::Id::unique("shell-dialog"))).unwrap();
-            assert!(
-                field.top() - win.top() < 80.0,
-                "dir={dir:?}: the Name row sits under the title, not centred in the body: {field:?} in {win:?}"
-            );
+            assert!(field.top() - win.top() < 80.0, "dir={dir:?}: the Name row sits under the title, not centred in the body: {field:?} in {win:?}");
             let ok = h.get_by_label("OK").rect();
             let cancel = h.get_by_label("Cancel").rect();
             if rtl {
@@ -873,10 +870,7 @@ mod tests {
                 assert!(shift.center().x < alt.center().x, "LTR: {shift:?} vs {alt:?}");
             }
             let win = h.ctx.memory(|m| m.area_rect(egui::Id::unique("modifier-keys"))).unwrap();
-            assert!(
-                shift.top() - win.top() < 80.0,
-                "dir={dir:?}: the button row sits under the title, not centred in the panel: {shift:?} in {win:?}"
-            );
+            assert!(shift.top() - win.top() < 80.0, "dir={dir:?}: the button row sits under the title, not centred in the panel: {shift:?} in {win:?}");
         }
     }
 }
