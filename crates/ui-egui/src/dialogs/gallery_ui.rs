@@ -1118,7 +1118,9 @@ mod rtl_tests {
             let top = cells.iter().map(|r| r.top()).fold(f32::INFINITY, f32::min);
             let row: Vec<ERect> = cells.into_iter().filter(|r| (r.top() - top).abs() <= 2.0).collect();
             assert!(row.len() >= 3, "the first row is full ({label}): {}", row.len());
-            let lead = if rtl { row.iter().max_by(|a, b| a.right().total_cmp(&b.right())) } else { row.iter().min_by(|a, b| a.left().total_cmp(&b.left())) }.copied().unwrap();
+            let lead = if rtl { row.iter().max_by(|a, b| a.right().total_cmp(&b.right())) } else { row.iter().min_by(|a, b| a.left().total_cmp(&b.left())) }
+                .copied()
+                .unwrap();
             click(&mut h, lead.center());
             let g = h.state().distort.gallery.as_ref().unwrap();
             assert_eq!(g.effects[g.selected].filter, GalleryFilter::ColoredPencil, "the leading cell is the category's first filter ({label})");
@@ -1172,7 +1174,11 @@ mod rtl_tests {
                 assert!(ok.center().x < cancel.center().x, "OK leads from the left ({label}): {ok:?} {cancel:?}");
             }
             let pos = |needle: &str| {
-                h.output().shapes.iter().position(|s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.text() == needle)).unwrap_or_else(|| panic!("the {needle} label is painted ({label})"))
+                h.output()
+                    .shapes
+                    .iter()
+                    .position(|s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.text() == needle))
+                    .unwrap_or_else(|| panic!("the {needle} label is painted ({label})"))
             };
             assert!(pos("OK") < pos("Cancel"), "OK is created before Cancel in both directions ({label})");
         }
