@@ -336,9 +336,11 @@ fn mirrored_rows(dir: crate::text::direction::Dir) -> (egui::Rect, egui::Rect, e
     h.run_steps(3);
     let frame = h.ctx.memory(|m| m.area_rect(egui::Id::unique(("dialog", id)))).expect("the dialog frame");
     eprintln!("DBG frame={frame:?}");
-    for role in [egui::accesskit::Role::Label, egui::accesskit::Role::Button, egui::accesskit::Role::TextInput, egui::accesskit::Role::ComboBox, egui::accesskit::Role::CheckBox] {
-        for n in h.query_all_by_role(role) {
-            eprintln!("DBG node {role:?} {:?}", n.rect());
+    for s in h.output().shapes.iter() {
+        if let egui::Shape::Rect(rs) = &s.shape {
+            if frame.contains_rect(rs.rect) && rs.rect.width() > 60.0 && rs.rect.height() > 40.0 {
+                eprintln!("DBG box {:?}", rs.rect);
+            }
         }
     }
     (h.get_by_label("Columns").rect(), h.get_by_label("Rows").rect(), h.get_by_label("OK").rect(), frame.center().x)

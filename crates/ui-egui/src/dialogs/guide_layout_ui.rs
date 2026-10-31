@@ -400,17 +400,31 @@ fn main_fields(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value
         let mut margins = f.get("margin").and_then(Value::as_array).cloned().unwrap_or_else(|| vec![json!(0); 4]);
         ui.add_space(5.0);
         ui.add_enabled_ui(enabled, |ui| {
-            ui.horizontal(|ui| {
-                for (value, label) in margins.iter_mut().zip([tl!("Top:"), tl!("Left:"), tl!("Bottom:"), tl!("Right:")]) {
-                    ui.vertical(|ui| {
-                        ui.label(label);
-                        let mut n = value.as_f64().unwrap_or(0.0) as f32;
-                        if widgets::value_field(ui, &mut n, 0.0..=300_000.0, "px", 64.0).accessible_name(label).changed() {
-                            *value = json!(n);
-                        }
-                    });
+            let mut pair = |ui: &mut egui::Ui, value: &mut Value, label: &str| {
+                ui.label(label);
+                let mut n = value.as_f64().unwrap_or(0.0) as f32;
+                if widgets::value_field(ui, &mut n, 0.0..=300_000.0, "px", 64.0).accessible_name(label).changed() {
+                    *value = json!(n);
                 }
-            });
+            };
+            let labels = [tl!("Top:"), tl!("Left:"), tl!("Bottom:"), tl!("Right:")];
+            if crate::direction::is_rtl() {
+                // In a right-to-left row each pair gets an explicit width: the fork's RTL
+                // available-width read balloons the row and pushes the action rail out of the frame.
+                eprintln!("DBG margin avail={:?}", ui.available_size_before_wrap());
+                ui.with_layout(crate::direction::row(), |ui| {
+                    for (value, label) in margins.iter_mut().zip(labels) {
+                        let r = ui.allocate_ui_with_layout(egui::vec2(72.0, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| pair(ui, value, label));
+                        eprintln!("DBG pair {label:?} rect={:?} inner={:?}", r.response.rect, r.inner);
+                    }
+                });
+            } else {
+                ui.horizontal(|ui| {
+                    for (value, label) in margins.iter_mut().zip(labels) {
+                        ui.vertical(|ui| pair(ui, value, label));
+                    }
+                });
+            }
         });
         f.insert("margin".into(), Value::Array(margins));
     });
