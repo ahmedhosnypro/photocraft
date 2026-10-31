@@ -514,10 +514,7 @@ mod rtl_tests {
     /// The prompt's frame, as the modal's area reports it (`Area::end` pins the move widget's
     /// rect to the final frame).
     fn frame(h: &Prompted) -> egui::Rect {
-        h.ctx
-            .read_response(egui::Id::unique("discard-prompt").with("move"))
-            .unwrap_or_else(|| panic!("the modal's frame is not registered"))
-            .rect
+        h.ctx.read_response(egui::Id::unique("discard-prompt").with("move")).unwrap_or_else(|| panic!("the modal's frame is not registered")).rect
     }
 
     /// The prompt keeps its width in both directions.
