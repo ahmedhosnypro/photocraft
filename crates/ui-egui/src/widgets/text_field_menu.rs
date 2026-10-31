@@ -464,12 +464,14 @@ mod tests {
     /// left-to-right UI, its right edge in a right-to-left one.
     #[test]
     fn the_edit_menu_hangs_from_the_pointer_at_its_reading_start_edge() {
+        let screen = |h: &Harness<'_, PhotocraftApp>| h.ctx.content_rect();
         let _ltr = crate::direction::direction_scope(crate::direction::Dir::Ltr);
         let (mut h, field) = renaming();
         let at = h.ctx.read_response(field).unwrap().rect.center();
         right_click(&mut h, field);
         let menu = h.ctx.memory(|m| m.area_rect(super::menu_id())).expect("the menu is drawn");
-        assert!((menu.left() - at.x).abs() < 1.0, "LTR: the menu's left edge is at the pointer ({menu:?} vs {at:?})");
+        let want = at.x.min(screen(&h).right() - menu.width()).max(screen(&h).left());
+        assert!((menu.left() - want).abs() < 1.0, "LTR: the menu's left edge hangs from the pointer ({menu:?} vs pointer x {at:?})");
 
         let _rtl = crate::direction::direction_scope(crate::direction::Dir::Rtl);
         let (mut h, field) = renaming();
@@ -477,6 +479,7 @@ mod tests {
         let at = h.ctx.read_response(field).unwrap().rect.center();
         right_click(&mut h, field);
         let menu = h.ctx.memory(|m| m.area_rect(super::menu_id())).expect("the menu is drawn");
-        assert!((menu.right() - at.x).abs() < 1.0, "RTL: the menu's right edge is at the pointer ({menu:?} vs {at:?})");
+        let want = at.x.min(screen(&h).right()).max(screen(&h).left() + menu.width());
+        assert!((menu.right() - want).abs() < 1.0, "RTL: the menu's right edge hangs from the pointer ({menu:?} vs pointer x {at:?})");
     }
 }
