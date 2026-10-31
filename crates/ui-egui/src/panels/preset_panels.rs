@@ -1005,11 +1005,13 @@ mod tests {
     fn a_reading_order_row_allocates_like_ui_horizontal() {
         let row = |converted: bool| {
             let ctx = egui::Context::default();
-            let mut input = egui::RawInput::default();
-            input.screen_rect = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0)));
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0))),
+                ..Default::default()
+            };
             let mut rect = egui::Rect::ZERO;
             let mut interact_h = 0.0;
-            ctx.run_ui(input, |ui| {
+            let out = ctx.run_ui(input, |ui| {
                 interact_h = ui.spacing().interact_size.y;
                 let r = if converted {
                     ui.allocate_ui_with_layout(egui::vec2(ui.available_size_before_wrap().x, interact_h), crate::direction::row(), |ui| ui.label("x"))
@@ -1018,6 +1020,8 @@ mod tests {
                 };
                 rect = r.response.rect;
             });
+            // The headless pass never uploads the atlas; drop its delta deliberately.
+            out.textures_delta.clear();
             (rect, interact_h)
         };
         let (converted, interact_h) = row(true);
