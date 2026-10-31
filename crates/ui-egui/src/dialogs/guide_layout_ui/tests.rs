@@ -335,14 +335,6 @@ fn mirrored_rows(dir: crate::text::direction::Dir) -> (egui::Rect, egui::Rect, e
     let mut h = harness(app);
     h.run_steps(3);
     let frame = h.ctx.memory(|m| m.area_rect(egui::Id::unique(("dialog", id)))).expect("the dialog frame");
-    eprintln!("DBG frame={frame:?}");
-    for s in h.output().shapes.iter() {
-        if let egui::Shape::Rect(rs) = &s.shape {
-            if frame.contains_rect(rs.rect) && rs.rect.width() > 60.0 && rs.rect.height() > 40.0 {
-                eprintln!("DBG box {:?}", rs.rect);
-            }
-        }
-    }
     (h.get_by_label("Columns").rect(), h.get_by_label("Rows").rect(), h.get_by_label("OK").rect(), frame.center().x)
 }
 
@@ -356,8 +348,6 @@ fn the_body_rows_mirror_in_a_right_to_left_ui() {
     assert!(l_ok.left() > l_rows.right(), "LTR: the rail follows the fields: {l_ok:?} / {l_rows:?}");
 
     let (r_columns, r_rows, r_ok, r_axis) = mirrored_rows(crate::text::direction::Dir::Rtl);
-    eprintln!("DBG LTR columns={l_columns:?} rows={l_rows:?} ok={l_ok:?} axis={l_axis}");
-    eprintln!("DBG RTL columns={r_columns:?} rows={r_rows:?} ok={r_ok:?} axis={r_axis}");
     assert!((l_axis - r_axis).abs() < 1.0, "the dialog sits at the same place in both directions: {l_axis} / {r_axis}");
     assert!(r_columns.left() > r_rows.right(), "RTL: the Columns group still leads, from the right: {r_columns:?} / {r_rows:?}");
     assert!(r_ok.right() < r_rows.left(), "RTL: the rail leads at the reading end: {r_ok:?} / {r_rows:?}");

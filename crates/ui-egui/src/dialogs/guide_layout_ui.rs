@@ -409,13 +409,12 @@ fn main_fields(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value
             };
             let labels = [tl!("Top:"), tl!("Left:"), tl!("Bottom:"), tl!("Right:")];
             if crate::direction::is_rtl() {
-                // In a right-to-left row each pair gets an explicit width: the fork's RTL
-                // available-width read balloons the row and pushes the action rail out of the frame.
-                eprintln!("DBG margin avail={:?}", ui.available_size_before_wrap());
+                // Same row as left-to-right, in reading order: each pair keeps its natural
+                // width, so the row never balloons past the column (the fork's RTL
+                // available-width read inside the mirrored group comes back huge).
                 ui.with_layout(crate::direction::row(), |ui| {
                     for (value, label) in margins.iter_mut().zip(labels) {
-                        let r = ui.allocate_ui_with_layout(egui::vec2(72.0, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| pair(ui, value, label));
-                        eprintln!("DBG pair {label:?} rect={:?} inner={:?}", r.response.rect, r.inner);
+                        ui.vertical(|ui| pair(ui, value, label));
                     }
                 });
             } else {
