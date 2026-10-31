@@ -137,9 +137,7 @@ mod tests {
         let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
         app.run("file.new", serde_json::json!({"width": 64, "height": 64})).unwrap();
         park(&mut app, "/tmp/photocraft-targa-options.tga".into(), false, "file.saveAs").unwrap();
-        let mut h = egui_kittest::Harness::builder()
-            .with_size(egui::vec2(1280.0, 800.0))
-            .build_ui_state(|ui, app| show(app, ui.ctx()), app);
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1280.0, 800.0)).build_ui_state(|ui, app| show(app, ui.ctx()), app);
         PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
         h.run_steps(4);
         Geometry {
