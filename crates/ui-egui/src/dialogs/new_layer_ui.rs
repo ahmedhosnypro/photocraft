@@ -75,6 +75,24 @@ pub fn body(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     ui.with_layout(crate::direction::body_layout(), |ui| body_fields(ui, f));
 }
 
+/// A single-line edit whose text reads right-to-left in a right-to-left UI (Arabic names align
+/// to the field's right edge); a left-to-right UI keeps egui's default edit, unchanged.
+fn add_rtl_singleline(ui: &mut egui::Ui, text: &mut String, configure: impl FnOnce(egui::TextEdit<'_>) -> egui::TextEdit<'_>) -> egui::Response {
+    let edit = configure(egui::TextEdit::singleline(text));
+    if !crate::direction::is_rtl() {
+        return ui.add(edit);
+    }
+    let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, _wrap: f32| {
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        let mut job = egui::text::LayoutJob::simple_singleline(buf.as_str().to_owned(), font, ui.visuals().text_color());
+        job.direction = egui::epaint::text::TextDirection::RightToLeft;
+        job.halign = egui::Align::Max;
+        job.keep_trailing_whitespace = true;
+        ui.fonts_mut(|f| f.layout_job(job))
+    };
+    ui.add(edit.align(egui::Align2::RIGHT_CENTER).layouter(&mut layouter))
+}
+
 /// The dialog's fields.
 fn body_fields(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     let label_width = 64.0;
@@ -85,7 +103,7 @@ fn body_fields(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     ui.horizontal(|ui| {
         let name_label = row_label(ui, tl!("Name:"));
         let mut name = f.get("name").and_then(Value::as_str).unwrap_or("").to_string();
-        let field = ui.add(egui::TextEdit::singleline(&mut name).desired_width(260.0)).labelled_by(name_label.id);
+        let field = add_rtl_singleline(ui, &mut name, |e| e.desired_width(260.0)).labelled_by(name_label.id);
         if field.changed() {
             f.insert("name".into(), json!(name));
         }
