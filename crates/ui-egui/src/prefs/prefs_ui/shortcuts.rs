@@ -1,14 +1,6 @@
 use super::dialogs::toolbar_tab;
 use super::{BTreeMap, Map, PhotocraftApp, RichText, Tokens, Value, default_shortcut, json, prefs, vec2};
 
-/// A single-line text edit. In a right-to-left UI its text reads from the right, via the shared
-/// [`crate::widgets::rtl_singleline`]; a left-to-right UI keeps egui's default edit, pixel-identical.
-fn singleline_edit(ui: &mut egui::Ui, text: &mut String, width: f32, hint: &str) -> egui::Response {
-    let font = egui::TextStyle::Body.resolve(ui.style());
-    let mut layouter = crate::widgets::rtl_singleline_layouter(font);
-    ui.add(crate::widgets::rtl_singleline(text, &mut layouter).desired_width(width).hint_text(hint.to_owned()))
-}
-
 /// Every shortcut-bearing command (engine registry plus shell commands): (id, label, menu path,
 /// default shortcut), menu items first in Photoshop order.
 pub fn shortcut_items(app: &PhotocraftApp) -> Vec<(String, String, Vec<String>, Option<String>)> {
@@ -229,7 +221,7 @@ pub(super) fn shortcuts_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut
     let mut filter = f.get("filter").and_then(Value::as_str).unwrap_or("").to_string();
     ui.horizontal(|ui| {
         ui.label(RichText::new(tl!("Search")).color(t.text_dim));
-        singleline_edit(ui, &mut filter, 260.0, tl!("command or shortcut"));
+        crate::widgets::rtl_singleline_edit(ui, &mut filter, 260.0, tl!("command or shortcut"));
     });
     f.insert("filter".into(), json!(filter));
     // Menu path and command label as shown in the menus, in the UI language.
@@ -690,7 +682,7 @@ fn set_row(
         let mut cancel = false;
         ui.horizontal(|ui| {
             ui.label(tl!("Name:"));
-            let r = singleline_edit(ui, name, 220.0, tl!("set name"));
+            let r = crate::widgets::rtl_singleline_edit(ui, name, 220.0, tl!("set name"));
             create = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             create |= ui.button(tl!("Create")).clicked();
             cancel = ui.button(tl!("Cancel")).clicked();
