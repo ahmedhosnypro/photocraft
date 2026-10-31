@@ -134,10 +134,7 @@ struct RecentRow {
 /// end, and the file name and folder between them.
 fn recent_row(row: Rect, name_w: f32, hovered: bool) -> RecentRow {
     let rtl = crate::direction::is_rtl();
-    let close = Rect::from_center_size(
-        egui::pos2(if rtl { row.left() + 16.0 } else { row.right() - 16.0 }, row.center().y),
-        egui::vec2(22.0, 22.0),
-    );
+    let close = Rect::from_center_size(egui::pos2(if rtl { row.left() + 16.0 } else { row.right() - 16.0 }, row.center().y), egui::vec2(22.0, 22.0));
     let end = if hovered {
         if rtl { close.right() + 4.0 } else { close.left() - 4.0 }
     } else if rtl {
@@ -145,10 +142,7 @@ fn recent_row(row: Rect, name_w: f32, hovered: bool) -> RecentRow {
     } else {
         row.right() - 10.0
     };
-    let icon = Rect::from_center_size(
-        egui::pos2(if rtl { row.right() - 16.0 } else { row.left() + 16.0 }, row.center().y),
-        egui::vec2(16.0, 16.0),
-    );
+    let icon = Rect::from_center_size(egui::pos2(if rtl { row.right() - 16.0 } else { row.left() + 16.0 }, row.center().y), egui::vec2(16.0, 16.0));
     let name_x = if rtl { row.right() - 32.0 - name_w } else { row.left() + 32.0 };
     let folder_max = if rtl { (name_x - 14.0 - end).max(0.0) } else { (end - (name_x + name_w + 14.0)).max(0.0) };
     RecentRow { close, end, icon, name_x, folder_max }
@@ -264,10 +258,7 @@ mod tests {
         let lead = (row_w - (title_w + note_w + 10.0)) / 2.0;
         // The note box sits next to the title: to its right left-to-right, to its left right-to-left.
         let ltr_box = Rect::from_min_size(egui::pos2(lead + title_w + spacing, 0.0), egui::vec2(note_w + 10.0, 20.0));
-        let rtl_box = Rect::from_min_size(
-            egui::pos2(row_w - lead - title_w - spacing - note_w - 10.0, 0.0),
-            egui::vec2(note_w + 10.0, 20.0),
-        );
+        let rtl_box = Rect::from_min_size(egui::pos2(row_w - lead - title_w - spacing - note_w - 10.0, 0.0), egui::vec2(note_w + 10.0, 20.0));
         let (ltr_x, rtl_x) = {
             let _ltr = crate::direction::direction_scope(crate::direction::Dir::Ltr);
             let ltr_x = note_x(ltr_box, crate::direction::is_rtl());
