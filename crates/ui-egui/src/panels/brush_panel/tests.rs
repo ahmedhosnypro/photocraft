@@ -1981,6 +1981,17 @@ fn rtl_columns_swap_sections_right_options_left() {
     let sections = h.get_by_label("Brush Tip Shape").rect();
     let options = caption_rect(&h, "Size");
     eprintln!("DBG cols is_rtl={} sections={sections:?} options={options:?}", crate::direction::is_rtl());
+    {
+        use egui_kittest::kittest::NodeT;
+        let mut v: Vec<_> = h.query_all(egui_kittest::kittest::by().role(egui::accesskit::Role::Button).include_labels()).collect();
+        v.extend(h.query_all(egui_kittest::kittest::by().role(egui::accesskit::Role::CheckBox).include_labels()));
+        v.extend(h.query_all(egui_kittest::kittest::by().role(egui::accesskit::Role::Label).include_labels()));
+        v.extend(h.query_all(egui_kittest::kittest::by().role(egui::accesskit::Role::SpinButton).include_labels()));
+        v.sort_by_key(|n| (n.rect().min.y as i32, n.rect().min.x as i32));
+        for n in v {
+            eprintln!("DBG node rect={:?} role={:?} label={:?}", n.rect(), n.accesskit_node().role(), n.accesskit_node().label());
+        }
+    }
     assert!(options.left() < sections.left(), "the options pane sits left of the sections in RTL: {options:?} {sections:?}");
 
     drop(rtl);
