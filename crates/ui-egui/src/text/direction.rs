@@ -167,6 +167,13 @@ pub fn ltr<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> egui::
     ui.with_layout(Layout::left_to_right(Align::Min), add)
 }
 
+/// [`ltr`] for a block in a vertical flow: keeps the top-down direction (and so the parent's
+/// cursor advance) but keeps nested rows left-to-right, which a mirrored body
+/// (`top_down(Align::Max)`) would not. Wrap direction-blind widgets such as `egui::Grid` in this.
+pub fn ltr_vertical<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> egui::InnerResponse<R> {
+    ui.with_layout(Layout::top_down(Align::Min), add)
+}
+
 /// Two `egui::Grid` cells in reading order — label then editor left-to-right, editor then label
 /// right-to-left. `egui::Grid` ignores the direction flag, so the column order is emitted
 /// manually. Call once per row; end the row with `ui.end_row()` as usual.
