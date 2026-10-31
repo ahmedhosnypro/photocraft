@@ -36,7 +36,9 @@ struct RenameComp {
 fn rename_field(ui: &mut egui::Ui, id: egui::Id, rect: Rect) -> Option<String> {
     let mut r = ui.data(|d| d.get_temp::<RenameComp>(id))?;
     ui.data_mut(|d| d.remove::<RenameComp>(id));
-    let te = ui.put(rect, egui::TextEdit::singleline(&mut r.text).id(id).font(egui::FontId::proportional(12.0))).accessible_name(tl!("Name"));
+    let font = egui::FontId::proportional(12.0);
+    let mut layouter = crate::widgets::rtl_singleline_layouter(font.clone());
+    let te = ui.put(rect, crate::widgets::rtl_singleline(&mut r.text, &mut layouter).id(id).font(font)).accessible_name(tl!("Name"));
     if !r.focused {
         te.request_focus();
         // Like Photoshop, the whole name starts selected so typing replaces it.
