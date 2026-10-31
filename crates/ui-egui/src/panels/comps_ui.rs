@@ -5,7 +5,7 @@
 //! appearance). Footer: previous / next comp, update, new, delete. Every action is a
 //! `layerComp.*` engine command; the selection is `UiState::layer_comp_selected`.
 
-use egui::{Align2, Color32, Rect, Sense, Stroke, pos2, vec2};
+use egui::{Color32, Rect, Sense, Stroke, pos2, vec2};
 use serde_json::{Value, json};
 
 use crate::PhotocraftApp;
@@ -83,23 +83,23 @@ fn drop_index(from: usize, target: usize, after: bool) -> usize {
 /// The x anchors of a comp row's fixed elements: the apply marker, the name and the three apply
 /// toggles in their logical order (eye, move, sparkles). Every anchor mirrors about the row's
 /// centre between the directions, and the toggles pack from the reading end.
-fn row_anchors(rect: Rect, rtl: bool) -> (f32, f32, [f32; 3]) {
-    if rtl {
-        (rect.right() - 14.0, rect.right() - 30.0, [rect.left() + 58.0, rect.left() + 36.0, rect.left() + 14.0])
-    } else {
-        (rect.left() + 14.0, rect.left() + 30.0, [rect.right() - 58.0, rect.right() - 36.0, rect.right() - 14.0])
-    }
+fn row_anchors(rect: Rect) -> (f32, f32, [f32; 3]) {
+    (
+        crate::direction::start_x(rect, 14.0),
+        crate::direction::start_x(rect, 30.0),
+        [crate::direction::end_x(rect, 58.0), crate::direction::end_x(rect, 36.0), crate::direction::end_x(rect, 14.0)],
+    )
 }
 
 /// The row's apply-marker square: 12×12, centred on the row's reading-start anchor.
-fn marker_rect(rect: Rect, rtl: bool) -> Rect {
-    let (x, _, _) = row_anchors(rect, rtl);
+fn marker_rect(rect: Rect) -> Rect {
+    let (x, _, _) = row_anchors(rect);
     Rect::from_center_size(pos2(x, rect.center().y), vec2(12.0, 12.0))
 }
 
 /// The row's apply marker: the stroked square at the reading start; a check inside when applied.
 fn apply_marker(ui: &egui::Ui, ctx: &RowCtx<'_>, rect: Rect, checked: bool, check_tint: Color32) {
-    let marker = marker_rect(rect, ctx.rtl);
+    let marker = marker_rect(rect);
     ui.painter().rect_stroke(marker, 2.0, Stroke::new(1.0, ctx.t.text_faint), egui::StrokeKind::Inside);
     if checked {
         crate::icons::paint(ui, marker, "check", 10.0, check_tint);
@@ -116,10 +116,10 @@ fn last_state_row(ui: &mut egui::Ui, ctx: &RowCtx<'_>, applied: Option<u32>) -> 
         ui.painter().rect_filled(rect, 0.0, ctx.t.hover.gamma_multiply(0.5));
     }
     apply_marker(ui, ctx, rect, applied.is_none(), ctx.t.icon);
-    let (_, label_x, _) = row_anchors(rect, ctx.rtl);
+    let (_, label_x, _) = row_anchors(rect);
     ui.painter().text(
         pos2(label_x, rect.center().y),
-        if ctx.rtl { Align2::RIGHT_CENTER } else { Align2::LEFT_CENTER },
+        crate::direction::start_align(),
         tl!("Last Document State"),
         egui::FontId::proportional(12.0),
         ctx.t.text_dim,
@@ -153,7 +153,7 @@ fn draw_toggles(
         ("move", tl!("Position"), c.apply_position, "position"),
         ("sparkles", tl!("Appearance (Layer Style)"), c.apply_appearance, "appearance"),
     ];
-    let (_, _, toggle_xs) = row_anchors(rect, ctx.rtl);
+    let (_, _, toggle_xs) = row_anchors(rect);
     let mut toggle_hit = false;
     let mut action = None;
     for ((icon, tip, on, key), &x) in toggles.iter().zip(toggle_xs.iter()) {
@@ -190,7 +190,7 @@ fn draw_name(
     c: &photocraft_doc::LayerComp,
 ) -> (Option<(&'static str, Value)>, Rect, bool) {
     let missing = c.missing_layers(ctx.doc).len();
-    let (_, mut name_x, _) = row_anchors(rect, ctx.rtl);
+    let (_, mut name_x, _) = row_anchors(rect);
     let mut action = None;
     let mut hit = false;
     if missing > 0 {
@@ -321,7 +321,7 @@ fn comp_row(
     }
     if resp.clicked() && !toggle_hit {
         select = Some(c.id);
-        let marker = marker_rect(rect, ctx.rtl);
+        let marker = marker_rect(rect);
         let band = if ctx.rtl { marker.left() - 4.0 } else { marker.right() + 4.0 };
         let on_marker = |p: egui::Pos2| if ctx.rtl { p.x > band } else { p.x < band };
         if resp.interact_pointer_pos().is_some_and(on_marker) {
@@ -582,8 +582,14 @@ mod tests {
     fn row_anchors_mirror_about_the_row_centre() {
         let rect = Rect::from_min_max(pos2(100.0, 10.0), pos2(400.0, 36.0));
         let mirror = |x: f32| rect.left() + rect.right() - x;
-        let (marker_ltr, name_ltr, toggles_ltr) = row_anchors(rect, false);
-        let (marker_rtl, name_rtl, toggles_rtl) = row_anchors(rect, true);
+        let (marker_ltr, name_ltr, toggles_ltr) = {
+            let _ltr = crate::direction::direction_scope(crate::direction::Dir::Ltr);
+            row_anchors(rect)
+        };
+        let (marker_rtl, name_rtl, toggles_rtl) = {
+            let _rtl = crate::direction::direction_scope(crate::direction::Dir::Rtl);
+            row_anchors(rect)
+        };
         assert_eq!(marker_rtl, mirror(marker_ltr), "the apply marker mirrors");
         assert_eq!(name_rtl, mirror(name_ltr), "the name anchors mirror");
         for (ltr, rtl) in toggles_ltr.iter().zip(toggles_rtl.iter()) {
