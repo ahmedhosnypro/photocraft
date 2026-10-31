@@ -203,9 +203,11 @@ pub fn body(app: &PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) 
             }
             // Right-click: the length units for this field (the sizes stay in pixels).
             resp.context_menu(|ui| {
-                if let Some(name) = crate::rulers::unit_menu_of(ui, unit, &crate::rulers::LENGTH_UNITS) {
-                    f.insert(unit_key.into(), json!(name));
-                }
+                crate::menus::popup_body(ui, |ui| {
+                    if let Some(name) = crate::rulers::unit_menu_of(ui, unit, &crate::rulers::LENGTH_UNITS) {
+                        f.insert(unit_key.into(), json!(name));
+                    }
+                });
             });
         });
     }
@@ -364,5 +366,49 @@ mod rtl_tests {
         };
         let (caption, value) = pair(&rtl, "Sides:");
         assert!(caption.left() > value.right(), "RTL: the caption is right of its field: {caption:?} {value:?}");
+    }
+
+    /// The right-click units menu's rows: RTL puts the checked unit's label at the popup's right
+    /// edge with its mark in the reading-start gutter; LTR is unchanged.
+    #[test]
+    fn the_units_context_menu_mirrors_only_under_rtl() {
+        let menu_texts = |dir: crate::text::direction::Dir| {
+            let _scope = crate::text::direction::direction_scope(dir);
+            let ctx = egui::Context::default();
+            ctx.all_styles_mut(|s| s.right_to_left = dir == crate::text::direction::Dir::Rtl);
+            let mut popup = egui::Rect::NOTHING;
+            let mut texts = Vec::new();
+            for _ in 0..3 {
+                let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                    let btn = ui.button("field");
+                    let _ = egui::Popup::menu(&btn)
+                        .open_memory(Some(egui::SetOpenCommand::Bool(true)))
+                        .show(|ui| {
+                            crate::menus::popup_body(ui, |ui| {
+                                let _ = crate::rulers::unit_menu_of(ui, Unit::Pixels, &crate::rulers::LENGTH_UNITS);
+                            });
+                        })
+                        .inspect(|r| popup = r.response.rect);
+                });
+                texts = out
+                    .shapes
+                    .iter()
+                    .filter_map(|cs| match &cs.shape {
+                        egui::Shape::Text(ts) => Some((ts.galley.text().to_string(), cs.shape.visual_bounding_rect())),
+                        _ => None,
+                    })
+                    .collect();
+                out.textures_delta.clear();
+            }
+            (popup, texts)
+        };
+        let (rtl_popup, rtl) = menu_texts(crate::text::direction::Dir::Rtl);
+        let (ltr_popup, ltr) = menu_texts(crate::text::direction::Dir::Ltr);
+        assert!(rtl_popup.is_positive() && ltr_popup.is_positive(), "the popups opened");
+        let at = |v: &[(String, egui::Rect)], s: &str| v.iter().find(|(t, _)| t.contains(s)).map(|(_, r)| *r).unwrap_or(egui::Rect::NOTHING);
+        let px = at(&rtl, "Pixels");
+        assert!(rtl_popup.right() - px.right() < 32.0, "rtl: the row label hugs the popup's right edge: {px:?} in {rtl_popup:?}");
+        let px = at(&ltr, "Pixels");
+        assert!(px.left() - ltr_popup.left() < 32.0, "ltr: the row label hugs the popup's left edge: {px:?} in {ltr_popup:?}");
     }
 }
