@@ -227,7 +227,7 @@ pub(super) fn tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
             }
             let has_path = st.path.is_some();
             resp.context_menu(|ui| {
-                tab_action = tab_context_menu(ui, doc, document_count, has_path);
+                tab_action = crate::menus::popup_body(ui, |ui| tab_context_menu(ui, doc, document_count, has_path));
             });
         }
         // Files opening in the background: a tab with a progress underline; × cancels.
@@ -325,7 +325,7 @@ fn tab_context_menu(ui: &mut egui::Ui, index: usize, count: usize, has_path: boo
     crate::widgets::menu_scroll(ui, |ui| {
         ui.set_min_width(170.0);
         for (label, id, params, enabled) in tab_context_items(index, count, has_path) {
-            if ui.add_enabled(enabled, egui::Button::new(tl!(label))).clicked() {
+            if crate::menu_keys::menu_row(ui, tl!(label), None, false, enabled).clicked() {
                 ui.close();
                 return Some((id, params));
             }
@@ -589,7 +589,7 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
         }
         let has_path = app.session.documents().get(doc).is_some_and(|d| d.path.is_some());
         resp.context_menu(|ui| {
-            tab_action = tab_context_menu(ui, doc, document_count, has_path);
+            tab_action = crate::menus::popup_body(ui, |ui| tab_context_menu(ui, doc, document_count, has_path));
         });
         doc_tabs.push((doc, r));
     }
