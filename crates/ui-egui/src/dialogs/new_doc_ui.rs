@@ -296,6 +296,26 @@ fn small_label(ui: &mut egui::Ui, s: &str) {
     ui.label(RichText::new(s).size(11.5).color(t.text_dim));
 }
 
+/// The preset-details name field. In a right-to-left UI its text runs right-to-left: the
+/// paragraph base direction and the alignment follow the UI direction, as the title bar's
+/// and the menus' do, so Arabic names align to the field's right edge. A left-to-right UI
+/// keeps egui's default left-aligned single-line edit, pixel-identical.
+fn name_edit(ui: &mut egui::Ui, name: &mut String) -> egui::Response {
+    let edit = egui::TextEdit::singleline(name).desired_width(250.0).font(egui::FontId::proportional(15.0));
+    if !crate::direction::is_rtl() {
+        return ui.add(edit);
+    }
+    let font = egui::FontId::proportional(15.0);
+    let mut layouter = move |ui: &egui::Ui, text: &dyn egui::TextBuffer, _wrap_width: f32| {
+        let mut job = egui::text::LayoutJob::simple_singleline(text.as_str().to_owned(), font.clone(), ui.visuals().text_color());
+        job.direction = egui::epaint::text::TextDirection::RightToLeft;
+        job.halign = egui::Align::Max;
+        job.keep_trailing_whitespace = true;
+        ui.fonts_mut(|f| f.layout_job(job))
+    };
+    ui.add(edit.align(Align2::RIGHT_CENTER).layouter(&mut layouter))
+}
+
 /// Lay out a preset card's title centred in `width`: wrapped onto at most two lines, the rest
 /// elided, so long translations stay inside the card.
 fn card_title(painter: &egui::Painter, title: &str, width: f32, color: egui::Color32) -> std::sync::Arc<egui::Galley> {
@@ -659,7 +679,7 @@ fn body_blocks(app: &mut crate::PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<St
             // Keep the canonical English default in state; only the TextEdit shows a translation.
             let raw = get_s(f, "name", "Untitled-1");
             let mut name = if raw == "Untitled-1" { tl!("Untitled-1").to_string() } else { raw };
-            let r = ui.add(egui::TextEdit::singleline(&mut name).desired_width(250.0).font(egui::FontId::proportional(15.0))).accessible_name(tl!("Name"));
+            let r = name_edit(ui, &mut name).accessible_name(tl!("Name"));
             if r.changed() {
                 f.insert("name".into(), json!(name));
             }
