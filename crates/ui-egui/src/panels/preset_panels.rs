@@ -1011,7 +1011,7 @@ mod tests {
             };
             let mut rect = egui::Rect::ZERO;
             let mut interact_h = 0.0;
-            let out = ctx.run_ui(input, |ui| {
+            let mut out = ctx.run_ui(input, |ui| {
                 interact_h = ui.spacing().interact_size.y;
                 let r = if converted {
                     ui.allocate_ui_with_layout(egui::vec2(ui.available_size_before_wrap().x, interact_h), crate::direction::row(), |ui| ui.label("x"))
