@@ -372,6 +372,49 @@ fn text_field_bounds_an_oversized_existing_value() {
     assert!(h.state().chars().count() < super::TEXT_FIELD_LIMIT, "an edit keeps the bounded copy");
 }
 
+/// RTL: a text field's hint and value align at the reading start (the box's right edge), while a
+/// monospaced hex/code field stays left-to-right. Text is painted as a galley anchored at the
+/// align point, so the anchor's x sits at the field's inner left (LTR) or right (RTL).
+#[test]
+fn rtl_text_field_aligns_hint_and_value_at_the_reading_start() {
+    use egui::accesskit::Role;
+    fn anchor_x(shapes: &[egui::epaint::ClippedShape], needle: &str) -> Option<f32> {
+        fn walk(shape: &egui::Shape, needle: &str, found: &mut Option<f32>) {
+            match shape {
+                egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, needle, found)),
+                egui::Shape::Text(t) if t.galley.text().contains(needle) => *found = Some(t.pos.x),
+                _ => {}
+            }
+        }
+        let mut found = None;
+        shapes.iter().for_each(|c| walk(&c.shape, needle, &mut found));
+        found
+    }
+    let probe = |dir: crate::text::direction::Dir, mono: bool, text: &str, needle: &str| -> (egui::Rect, f32) {
+        let _dir = crate::text::direction::direction_scope(dir);
+        let mut h = Harness::builder().with_size(egui::vec2(300.0, 80.0))
+            .build_ui_state(|ui, s: &mut String| drop(super::text_field(ui, egui::Id::unique("tf"), s, "hint text", 200.0, mono)), text.to_string());
+        crate::PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::Studio);
+        h.run_steps(2);
+        let field = h.get_by_role(Role::TextInput).rect();
+        let x = anchor_x(&h.output().shapes, needle).expect("the text is painted");
+        (field, x)
+    };
+    // The hint shows while the field is empty.
+    let (field, x) = probe(crate::text::direction::Dir::Ltr, false, "", "hint text");
+    assert!(x < field.center().x, "LTR: the hint anchors at the left edge ({x} in {field:?})");
+    let (field, x) = probe(crate::text::direction::Dir::Rtl, false, "", "hint text");
+    assert!(x > field.center().x, "RTL: the hint anchors at the right edge ({x} in {field:?})");
+    // Typed value content follows the same alignment.
+    let (field, x) = probe(crate::text::direction::Dir::Ltr, false, "abc", "abc");
+    assert!(x < field.center().x, "LTR: the value anchors at the left edge ({x} in {field:?})");
+    let (field, x) = probe(crate::text::direction::Dir::Rtl, false, "abc", "abc");
+    assert!(x > field.center().x, "RTL: the value anchors at the right edge ({x} in {field:?})");
+    // Hex/code fields stay left-to-right even under RTL.
+    let (field, x) = probe(crate::text::direction::Dir::Rtl, true, "#282828", "#282828");
+    assert!(x < field.center().x, "RTL mono: code stays left-aligned ({x} in {field:?})");
+}
+
 /// #2150: text queued by the control channel (`ui.type`) joins the input in `raw_input_hook`
 /// and is cut like the OS's, so the cap must run after it is appended.
 #[test]

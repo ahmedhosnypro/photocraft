@@ -92,6 +92,9 @@ fn text_field_in(
         Some(b) => b,
         None => &mut *text,
     };
+    // Hint and value align at the field's reading start — the right edge in a right-to-left UI;
+    // monospaced hex and other code-like input stays left-to-right in both directions.
+    let align = if mono || !crate::direction::is_rtl() { egui::Align2::LEFT_CENTER } else { egui::Align2::RIGHT_CENTER };
     // TextEdit draws its text at the top of its rect; fill the box and centre the line in it, so
     // the text sits on the field's middle like a dropdown's or value field's.
     let edit = egui::TextEdit::singleline(shown)
@@ -100,7 +103,7 @@ fn text_field_in(
         .frame(egui::Frame::NONE)
         .font(font)
         .min_size(inner.size())
-        .align(egui::Align2::LEFT_CENTER)
+        .align(align)
         .char_limit(limit);
     // A child Ui keeps the field's selection colour local: `Visuals::selection` also fills selected
     // list rows and slider trails, which must keep the theme's.
