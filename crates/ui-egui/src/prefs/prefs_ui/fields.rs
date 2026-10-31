@@ -210,7 +210,10 @@ fn prefs_body(ui: &mut egui::Ui, f: &mut Map<String, Value>, system: Option<egui
         // The area grows to fit its content, so this must never ask for more than it was given.
         let content_height = settings_height(ui.available_height(), ui.spacing().item_spacing.y, crate::widgets::button_height(ui.ctx()));
         crate::widgets::vline(ui, content_height);
-        ui.vertical(|ui| {
+        // The page's content column follows the body's direction: in RTL its blocks — the title
+        // included — align at the reading start and the scroll area's content inherits the layout.
+        // LTR is egui's default `top_down(Align::Min)`, unchanged.
+        ui.with_layout(crate::text::direction::body_layout(), |ui| {
             ui.set_width((ui.available_width() - 12.0).max(340.0));
             let title = SECTIONS.iter().find(|(id, _)| *id == section).map_or("General", |(_, t)| *t);
             ui.label(RichText::new(tl!(&title)).font(crate::theme::semibold(14.0)).color(t.text));
@@ -679,5 +682,86 @@ fn field_rows(ui: &mut egui::Ui, section: &str, obj: &mut Map<String, Value>, ke
             _ => continue,
         }
         ui.end_row();
+    }
+}
+
+#[cfg(test)]
+mod rtl_direction_tests {
+    use super::*;
+    use crate::text::direction::Dir;
+    use egui::accesskit::Role;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    /// The dialog's working fields for `section`, as `open_preferences` builds them.
+    fn prefs_fields(section: &str) -> Map<String, Value> {
+        let all = prefs::Preferences::default().to_json();
+        let mut values = Map::new();
+        for (id, _) in SECTIONS {
+            if let Some(v) = all.get(id) {
+                values.insert(id.to_string(), v.clone());
+            }
+        }
+        let mut f = Map::new();
+        f.insert("section".into(), json!(section));
+        f.insert("values".into(), Value::Object(values));
+        f
+    }
+
+    /// Render `prefs_body` for `section` under `dir`; return the search field's rect and the
+    /// accessible label `needle`'s rect.
+    fn probe(section: &str, dir: Dir, needle: &str) -> (egui::Rect, egui::Rect) {
+        let _scope = crate::text::direction::direction_scope(dir);
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(1000.0, 700.0))
+            .with_context_setup(|ctx| crate::PhotocraftApp::setup_context(ctx, crate::theme::ThemeKind::Studio))
+            .build_ui_state(|ui, f: &mut Map<String, Value>| super::prefs_body(ui, f, None), prefs_fields(section));
+        h.run_steps(4);
+        let search = h
+            .query_all_by_role(Role::TextInput)
+            .map(|n| n.rect())
+            .min_by(|a, b| a.top().total_cmp(&b.top()))
+            .expect("the search field");
+        let label = h.query_all_by_role_and_label(Role::Label, needle).next().expect(needle).rect();
+        (search, label)
+    }
+
+    /// RTL: the active page's title hugs the content column's reading-start (right) edge.
+    #[test]
+    fn rtl_prefs_page_title_sits_at_the_content_reading_start() {
+        let (search, title) = probe("general", Dir::Rtl, "General");
+        assert!(
+            title.right() > search.center().x && title.right() < search.right() - 150.0,
+            "RTL: the title hugs the content column's right edge: {title:?} in {search:?}"
+        );
+    }
+
+    /// LTR twin: the title keeps the content column's left edge (after the section list).
+    #[test]
+    fn ltr_prefs_page_title_keeps_the_content_left_edge() {
+        let (search, title) = probe("general", Dir::Ltr, "General");
+        assert!(
+            title.left() > search.left() + 150.0 && title.left() < search.center().x,
+            "LTR: the title stays at the content column's left: {title:?} in {search:?}"
+        );
+    }
+
+    /// RTL: a page's settings rows (Scratch Disks) start at the content column's right edge.
+    #[test]
+    fn rtl_prefs_scratch_disks_rows_sit_at_the_reading_start() {
+        let (search, label) = probe("scratchDisks", Dir::Rtl, "Scratch disks");
+        assert!(
+            label.right() > search.center().x && label.right() < search.right() - 150.0,
+            "RTL: the settings label hugs the content column's right edge: {label:?} in {search:?}"
+        );
+    }
+
+    /// LTR twin: the same rows keep the content column's left edge.
+    #[test]
+    fn ltr_prefs_scratch_disks_rows_keep_the_left_edge() {
+        let (search, label) = probe("scratchDisks", Dir::Ltr, "Scratch disks");
+        assert!(
+            label.left() > search.left() + 150.0 && label.left() < search.center().x,
+            "LTR: the settings label stays at the content column's left: {label:?} in {search:?}"
+        );
     }
 }
