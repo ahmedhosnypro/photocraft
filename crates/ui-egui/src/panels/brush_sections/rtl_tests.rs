@@ -41,18 +41,12 @@ fn section_harness(section: usize, state: SectionState) -> Harness<'static, Sect
 
 /// The caption label with this text, not the field it names.
 fn caption_rect(h: &Harness<'_, SectionState>, text: &str) -> Rect {
-    h.query_all(by().label(text).include_labels())
-        .find(|n| n.accesskit_node().role() == Role::Label)
-        .unwrap_or_else(|| panic!("the `{text}` caption"))
-        .rect()
+    h.query_all(by().label(text).include_labels()).find(|n| n.accesskit_node().role() == Role::Label).unwrap_or_else(|| panic!("the `{text}` caption")).rect()
 }
 
 /// The value field with this accessible name, not the caption.
 fn field_rect(h: &Harness<'_, SectionState>, text: &str) -> Rect {
-    h.query_all(by().label(text).include_labels())
-        .find(|n| n.accesskit_node().role() != Role::Label)
-        .unwrap_or_else(|| panic!("the `{text}` field"))
-        .rect()
+    h.query_all(by().label(text).include_labels()).find(|n| n.accesskit_node().role() != Role::Label).unwrap_or_else(|| panic!("the `{text}` field")).rect()
 }
 
 /// The painted box of the number field: the 70×24 rounded rect the number sits in.
@@ -70,24 +64,13 @@ fn field_box(h: &Harness<'_, SectionState>, number: Rect) -> Rect {
 
 /// A sampled tip, so the Size row offers its "Restore original size" button.
 fn sampled_brush() -> BrushSettings {
-    BrushSettings {
-        tip: paint::TipShape::Sampled(paint::GrayTile::from_fn(8, 8, |_, _| 1.0)),
-        size: 77.0,
-        ..Default::default()
-    }
+    BrushSettings { tip: paint::TipShape::Sampled(paint::GrayTile::from_fn(8, 8, |_, _| 1.0)), size: 77.0, ..Default::default() }
 }
 
 /// A preset whose tip size is distinct, so the grid's painted size numbers identify it.
 fn preset(name: &str, size: f32) -> BrushPreset {
     let brush = BrushSettings { size, ..Default::default() };
-    BrushPreset {
-        name: name.to_string(),
-        brush,
-        builtin: true,
-        group: String::new(),
-        folder: Vec::new(),
-        captures: Default::default(),
-    }
+    BrushPreset { name: name.to_string(), brush, builtin: true, group: String::new(), folder: Vec::new(), captures: Default::default() }
 }
 
 /// A press and a release on the same spot.
@@ -147,14 +130,9 @@ fn rtl_tip_grid_starts_at_the_right() {
     let presets = vec![preset("First", 11.0), preset("Second", 22.0), preset("Third", 33.0)];
     let mut h = section_harness(0, SectionState { brush: sampled_brush(), presets, picked: None });
     let texts = painted_text(&h);
-    let number = |text: &str| {
-        texts.iter().find(|(s, _)| s == text).map(|(_, p)| *p).unwrap_or_else(|| panic!("the `{text}` size number"))
-    };
+    let number = |text: &str| texts.iter().find(|(s, _)| s == text).map(|(_, p)| *p).unwrap_or_else(|| panic!("the `{text}` size number"));
     let (first, second, third) = (number("11"), number("22"), number("33"));
-    assert!(
-        first.x > second.x && second.x > third.x,
-        "the first preset leads from the right: {first:?}, {second:?}, {third:?}"
-    );
+    assert!(first.x > second.x && second.x > third.x, "the first preset leads from the right: {first:?}, {second:?}, {third:?}");
     click_at(&mut h, first);
     assert_eq!(h.state().picked.as_deref(), Some("First"), "the right-most cell picks the first preset");
 }
@@ -172,9 +150,6 @@ fn rtl_angle_captions_hug_their_block() {
         let field = field_rect(&h, text);
         // The block keeps its 72 px reserve and ends one item spacing before the field's box.
         let block_right = field_box(&h, field).left() - spacing;
-        assert!(
-            (caption.right() - block_right).abs() < 1.5,
-            "the {text} caption ends at its block's right edge: {caption:?}, block right {block_right}"
-        );
+        assert!((caption.right() - block_right).abs() < 1.5, "the {text} caption ends at its block's right edge: {caption:?}, block right {block_right}");
     }
 }
