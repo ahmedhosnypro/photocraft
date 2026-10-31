@@ -970,12 +970,11 @@ mod rtl_tests {
     /// The dialog over a small painted document, with only the dialog drawn (like the LTR
     /// tests): the caller's `direction_scope` decides the direction.
     fn gallery_harness(app: PhotocraftApp) -> egui_kittest::Harness<'static, PhotocraftApp> {
-        let h = egui_kittest::Harness::builder()
+        egui_kittest::Harness::builder()
             .with_size(vec2(1280.0, 800.0))
             .with_max_steps(64)
-            .build_ui_state(|ui, app: &mut PhotocraftApp| show(app, ui.ctx()), app);
-        PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
-        h
+            .with_context_setup(|ctx| PhotocraftApp::setup_context(ctx, crate::theme::ThemeKind::ALL[0]))
+            .build_ui_state(|ui, app: &mut PhotocraftApp| show(app, ui.ctx()), app)
     }
 
     /// The app of the LTR tests: one document, one painted layer, the gallery open on it.
