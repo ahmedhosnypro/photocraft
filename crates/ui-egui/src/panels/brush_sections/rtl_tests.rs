@@ -137,6 +137,39 @@ fn rtl_tip_grid_starts_at_the_right() {
     assert_eq!(h.state().picked.as_deref(), Some("First"), "the right-most cell picks the first preset");
 }
 
+/// TEMPORARY PROBE — remove before finishing.
+#[test]
+fn probe_rtl_window_columns() {
+    use egui_kittest::kittest::Queryable;
+    let _rtl = crate::direction::direction_scope(crate::direction::Dir::Rtl);
+    let mut app = crate::PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+    app.ui.panels.brush_settings = true;
+    let mut h = Harness::builder().with_size(vec2(1200.0, 900.0)).build_ui_state(
+        |ui, app: &mut crate::PhotocraftApp| {
+            let ctx = ui.ctx().clone();
+            if !ctx.fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                return;
+            }
+            crate::panels::brush_panel::window(app, &ctx);
+        },
+        app,
+    );
+    crate::PhotocraftApp::setup_context(&h.ctx, theme::ThemeKind::ALL[0]);
+    h.run_steps(4);
+    eprintln!("PROBE is_rtl={}", crate::direction::is_rtl());
+    for label in ["Brush Tip Shape", "Scattering", "Size"] {
+        for n in h.query_all(by().label(label).include_labels()) {
+            eprintln!("PROBE {label:?} rect={:?} role={:?}", n.rect(), n.accesskit_node().role());
+        }
+    }
+    for s in &h.output().shapes {
+        let r = s.visual_rect();
+        if r.width() > 400.0 {
+            eprintln!("PROBE wide shape {:?} clip={:?}", r, s.clip_rect);
+        }
+    }
+}
+
 /// The angle and roundness captions hug the reading-start edge of their 72 px block: in a
 /// right-to-left UI the caption ends at the block's right edge, the mirror of the
 /// left-to-right row, so it sits right next to its field.
