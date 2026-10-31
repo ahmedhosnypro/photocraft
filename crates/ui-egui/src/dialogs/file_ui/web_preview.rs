@@ -90,33 +90,37 @@ pub fn table(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
         ui.spacing_mut().item_spacing = egui::vec2(1.0, 1.0);
         // The swatches keep the palette's index order in every direction: an indexed colour
         // table is data, not a reading row.
-        egui::Grid::new("web-color-table").spacing(egui::vec2(1.0, 1.0)).show(ui, |ui| {
-            for (i, source) in table.iter().enumerate() {
-                let mut color = settings.color_table_edits.get(&i).copied().unwrap_or(*source);
-                let response = ui.push_id(i, |ui| crate::widgets::color_edit_button_srgb(ui, &mut color)).inner;
-                response.clone().on_hover_text(format!("Index {i}: {}", web_cmds::rgb_hex(color)));
-                if response.clicked() {
-                    f.insert("__selectedColor".into(), json!(i));
-                }
-                if f.get("__selectedColor").and_then(Value::as_u64) == Some(i as u64) {
-                    let t = Tokens::get(ui.ctx());
-                    ui.painter().rect_stroke(response.rect, t.radius_sm, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
-                }
-                if response.changed() {
-                    let edits = f.entry("colorTableEdits").or_insert_with(|| json!({}));
-                    if let Some(edits) = edits.as_object_mut() {
-                        edits.insert(i.to_string(), json!(web_cmds::rgb_hex(color)));
+        // The fork's `Grid` cannot start under a right-to-left cursor; the swatch table is data
+        // and keeps its index order, so it runs in an LTR scope in either direction.
+        crate::direction::ltr_vertical(ui, |ui| {
+            egui::Grid::new("web-color-table").spacing(egui::vec2(1.0, 1.0)).show(ui, |ui| {
+                for (i, source) in table.iter().enumerate() {
+                    let mut color = settings.color_table_edits.get(&i).copied().unwrap_or(*source);
+                    let response = ui.push_id(i, |ui| crate::widgets::color_edit_button_srgb(ui, &mut color)).inner;
+                    response.clone().on_hover_text(format!("Index {i}: {}", web_cmds::rgb_hex(color)));
+                    if response.clicked() {
+                        f.insert("__selectedColor".into(), json!(i));
+                    }
+                    if f.get("__selectedColor").and_then(Value::as_u64) == Some(i as u64) {
+                        let t = Tokens::get(ui.ctx());
+                        ui.painter().rect_stroke(response.rect, t.radius_sm, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
+                    }
+                    if response.changed() {
+                        let edits = f.entry("colorTableEdits").or_insert_with(|| json!({}));
+                        if let Some(edits) = edits.as_object_mut() {
+                            edits.insert(i.to_string(), json!(web_cmds::rgb_hex(color)));
+                        }
+                    }
+                    if i % 16 == 15 {
+                        ui.end_row();
                     }
                 }
-                if i % 16 == 15 {
-                    ui.end_row();
+                if f.get("__transparentIndex").and_then(Value::as_u64).is_some() {
+                    let (rect, response) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
+                    crate::widgets::checker(ui.painter(), rect, 4.0);
+                    response.on_hover_text(tl!("Transparency"));
                 }
-            }
-            if f.get("__transparentIndex").and_then(Value::as_u64).is_some() {
-                let (rect, response) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
-                crate::widgets::checker(ui.painter(), rect, 4.0);
-                response.on_hover_text(tl!("Transparency"));
-            }
+            });
         });
     });
     let footer_size = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
