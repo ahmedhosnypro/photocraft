@@ -1916,7 +1916,10 @@ mod rtl_tests {
         eprintln!("DBG RTL title={rtl_title:?} button={rtl_button:?}");
         for n in ltr.query_all_by_label("Styles") { eprintln!("DBG LTR Styles node={:?}", n.rect()); }
         for n in rtl.query_all_by_label("Styles") { eprintln!("DBG RTL Styles node={:?}", n.rect()); }
-        for n in rtl.query_all_by_label("OK") { eprintln!("DBG RTL OK node={:?}", n.rect()); }
+        for role in [egui::accesskit::Role::Button, egui::accesskit::Role::Label] {
+            for n in ltr.query_all_by_role(role) { eprintln!("DBG LTR {role:?} {:?}", n.rect()); }
+            for n in rtl.query_all_by_role(role) { eprintln!("DBG RTL {role:?} {:?}", n.rect()); }
+        }
         assert!(ltr_button.left() > ltr_title.right(), "LTR: the button follows the title");
         assert!(rtl_button.right() < rtl_title.left(), "RTL: the button precedes the title");
         let ltr_gap = ltr_button.right() - ltr_title.left();
