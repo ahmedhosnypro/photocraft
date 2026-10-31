@@ -415,129 +415,55 @@ fn options_editor(app: &mut PhotocraftApp, ui: &mut egui::Ui, paragraph: bool, s
     let rtl = crate::text::direction::is_rtl();
     // The grid is direction-blind, so in a right-to-left UI it gets one column per row and each
     // row's content is a mirrored hand row (see the loops below).
-    egui::Grid::new(("style-opts", paragraph, id)).num_columns(if rtl { 1 } else { 3 }).spacing([6.0, 3.0]).show(ui, |ui| {
-        // (label, model key, panel key, kind)
-        let rows: &[(&str, &str, &str, &str)] = &[
-            (tl!("Font"), "font_family", "font", "font"),
-            (tl!("Size"), "size_pt", "size", "pt"),
-            (tl!("Leading"), "leading_pt", "leading", "leading"),
-            (tl!("Tracking"), "tracking", "tracking", "num"),
-            (tl!("Baseline"), "baseline_shift_pt", "baselineShift", "pt"),
-            (tl!("Color"), "color", "color", "color"),
-            (tl!("Faux Bold"), "faux_bold", "fauxBold", "bool"),
-            (tl!("Faux Italic"), "faux_italic", "fauxItalic", "bool"),
-            (tl!("Underline"), "underline", "underline", "bool"),
-            (tl!("Strikethrough"), "strikethrough", "strikethrough", "bool"),
-        ];
-        for &(label, key, panel, kind) in rows {
-            let mut on = defined(&char_attrs, key);
-            let was = on;
-            // The checkbox registers first in both directions, so the keyboard focus order and
-            // the editor's same-frame enable state match the left-to-right row.
-            let mut editor_cell = |ui: &mut egui::Ui, on: bool, v: &Value| {
-                ui.add_enabled_ui(on, |ui| match kind {
-                    "font" => {
-                        let mut f = v.as_str().unwrap_or("").to_string();
-                        if family_picker(ui, &format!("style-font-{paragraph}-{id}"), &mut f, preview, &mut library) {
-                            // A style picked under the family's ">" comes with it.
-                            set = Some(match library.picked_style.take() {
-                                Some(style) => json!({ panel: f, "fontStyle": style }),
-                                None => json!({ panel: f }),
-                            });
-                        }
-                    }
-                    "pt" | "num" | "leading" => {
-                        let auto = kind == "leading" && v.is_null();
-                        let mut x = v.as_f64().unwrap_or(0.0) as f32;
-                        let range = if kind == "num" { -1000.0..=10000.0 } else { -1296.0..=1296.0 };
-                        let unit = if kind == "num" { "" } else { " pt" };
-                        if auto {
-                            ui.label(RichText::new(tl!("Auto")).color(t.text_dim).size(11.5));
-                        } else if crate::widgets::value_field(ui, &mut x, range, unit, 70.0).accessible_name(tl!(&label)).changed() {
-                            set = Some(json!({ key: x }));
-                        }
-                    }
-                    "color" => {
-                        let c = serde_json::from_value::<photocraft_doc::Color>(v.clone()).map(|c| c.to_rgb()).unwrap_or([0.0; 3]);
-                        let [r, g, b] = c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
-                        open_color = crate::widgets::color_swatch(ui, Color32::from_rgb(r, g, b)).on_hover_text(tl!("Color Picker (Text Color)")).clicked();
-                    }
-                    _ => {
-                        let mut b = v.as_bool().unwrap_or(false);
-                        if ui.checkbox(&mut b, "").accessible_name(tl!(&label)).changed() {
-                            set = Some(json!({ key: b }));
-                        }
-                    }
-                });
-            };
-            if rtl {
-                row(ui, |ui| {
-                    let on_box = ui.checkbox(&mut on, "");
-                    let row_label = ui.label(RichText::new(tl!(&label)).color(if on { t.text } else { t.text_faint }).size(11.5));
-                    on_box.labelled_by(row_label.id);
-                    let v = if on { char_attrs[key].clone() } else { resolved_c[key].clone() };
-                    editor_cell(ui, on, &v);
-                });
-            } else {
-                let on_box = ui.checkbox(&mut on, "");
-                let row_label = ui.label(RichText::new(tl!(&label)).color(if on { t.text } else { t.text_faint }).size(11.5));
-                on_box.labelled_by(row_label.id);
-                let v = if on { char_attrs[key].clone() } else { resolved_c[key].clone() };
-                editor_cell(ui, on, &v);
-            }
-            ui.end_row();
-            if on != was {
-                if on {
-                    set = Some(json!({ key: resolved_c[key].clone() }));
-                } else {
-                    clear.push(key);
-                }
-            }
-        }
-        if paragraph {
-            let rows: &[(&str, &str, &str)] = &[
-                (tl!("Align"), "align", "align"),
-                (tl!("Indent First"), "first_line_indent_pt", "pt"),
-                (tl!("Indent Left"), "start_indent_pt", "pt"),
-                (tl!("Indent Right"), "end_indent_pt", "pt"),
-                (tl!("Space Before"), "space_before_pt", "pt"),
-                (tl!("Space After"), "space_after_pt", "pt"),
-                // Hyphenate is stored and round-trips to PSD, but layout never hyphenates (#6710).
+    // The fork's `Grid` cannot start under a right-to-left cursor, so it runs in an LTR scope;
+    // in RTL each row is one cell holding a mirrored hand row (the loops below).
+    crate::direction::ltr_vertical(ui, |ui| {
+        egui::Grid::new(("style-opts", paragraph, id)).num_columns(if rtl { 1 } else { 3 }).spacing([6.0, 3.0]).show(ui, |ui| {
+            // (label, model key, panel key, kind)
+            let rows: &[(&str, &str, &str, &str)] = &[
+                (tl!("Font"), "font_family", "font", "font"),
+                (tl!("Size"), "size_pt", "size", "pt"),
+                (tl!("Leading"), "leading_pt", "leading", "leading"),
+                (tl!("Tracking"), "tracking", "tracking", "num"),
+                (tl!("Baseline"), "baseline_shift_pt", "baselineShift", "pt"),
+                (tl!("Color"), "color", "color", "color"),
+                (tl!("Faux Bold"), "faux_bold", "fauxBold", "bool"),
+                (tl!("Faux Italic"), "faux_italic", "fauxItalic", "bool"),
+                (tl!("Underline"), "underline", "underline", "bool"),
+                (tl!("Strikethrough"), "strikethrough", "strikethrough", "bool"),
             ];
-            for &(label, key, kind) in rows {
-                let mut on = defined(&para_attrs, key);
+            for &(label, key, panel, kind) in rows {
+                let mut on = defined(&char_attrs, key);
                 let was = on;
-                // The checkbox registers first in both directions, so the keyboard focus order
-                // and the editor's same-frame enable state match the left-to-right row.
+                // The checkbox registers first in both directions, so the keyboard focus order and
+                // the editor's same-frame enable state match the left-to-right row.
                 let mut editor_cell = |ui: &mut egui::Ui, on: bool, v: &Value| {
                     ui.add_enabled_ui(on, |ui| match kind {
-                        "align" => {
-                            let mut a = v.as_str().unwrap_or("Left").to_string();
-                            // English values for the engine; labels go through `dropdown`'s `tl!`.
-                            let opts: Vec<(String, &str)> = [
-                                ("Left", "Left"),
-                                ("Center", "Center"),
-                                ("Right", "Right"),
-                                ("JustifyLeft", "Justify last left"),
-                                ("JustifyCenter", "Justify last centered"),
-                                ("JustifyRight", "Justify last right"),
-                                ("JustifyAll", "Justify all"),
-                            ]
-                            .into_iter()
-                            .map(|(v, l)| (v.to_string(), l))
-                            .collect();
-                            if crate::widgets::dropdown(ui, &format!("style-align-{id}"), tl!("Alignment"), &mut a, &opts, 110.0) {
-                                set = Some(json!({ "align": a }));
+                        "font" => {
+                            let mut f = v.as_str().unwrap_or("").to_string();
+                            if family_picker(ui, &format!("style-font-{paragraph}-{id}"), &mut f, preview, &mut library) {
+                                // A style picked under the family's ">" comes with it.
+                                set = Some(match library.picked_style.take() {
+                                    Some(style) => json!({ panel: f, "fontStyle": style }),
+                                    None => json!({ panel: f }),
+                                });
                             }
                         }
-                        "pt" => {
-                            let mut x = v.as_f64().unwrap_or(0.0) as f32 * type_unit;
-                            if crate::widgets::value_field(ui, &mut x, -1296.0 * type_unit..=1296.0 * type_unit, &format!(" {unit_label}"), 70.0)
-                                .accessible_name(tl!(&label))
-                                .changed()
-                            {
-                                set = Some(json!({ key: x / type_unit }));
+                        "pt" | "num" | "leading" => {
+                            let auto = kind == "leading" && v.is_null();
+                            let mut x = v.as_f64().unwrap_or(0.0) as f32;
+                            let range = if kind == "num" { -1000.0..=10000.0 } else { -1296.0..=1296.0 };
+                            let unit = if kind == "num" { "" } else { " pt" };
+                            if auto {
+                                ui.label(RichText::new(tl!("Auto")).color(t.text_dim).size(11.5));
+                            } else if crate::widgets::value_field(ui, &mut x, range, unit, 70.0).accessible_name(tl!(&label)).changed() {
+                                set = Some(json!({ key: x }));
                             }
+                        }
+                        "color" => {
+                            let c = serde_json::from_value::<photocraft_doc::Color>(v.clone()).map(|c| c.to_rgb()).unwrap_or([0.0; 3]);
+                            let [r, g, b] = c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
+                            open_color = crate::widgets::color_swatch(ui, Color32::from_rgb(r, g, b)).on_hover_text(tl!("Color Picker (Text Color)")).clicked();
                         }
                         _ => {
                             let mut b = v.as_bool().unwrap_or(false);
@@ -552,26 +478,104 @@ fn options_editor(app: &mut PhotocraftApp, ui: &mut egui::Ui, paragraph: bool, s
                         let on_box = ui.checkbox(&mut on, "");
                         let row_label = ui.label(RichText::new(tl!(&label)).color(if on { t.text } else { t.text_faint }).size(11.5));
                         on_box.labelled_by(row_label.id);
-                        let v = if on { para_attrs[key].clone() } else { resolved_p[key].clone() };
+                        let v = if on { char_attrs[key].clone() } else { resolved_c[key].clone() };
                         editor_cell(ui, on, &v);
                     });
                 } else {
                     let on_box = ui.checkbox(&mut on, "");
                     let row_label = ui.label(RichText::new(tl!(&label)).color(if on { t.text } else { t.text_faint }).size(11.5));
                     on_box.labelled_by(row_label.id);
-                    let v = if on { para_attrs[key].clone() } else { resolved_p[key].clone() };
+                    let v = if on { char_attrs[key].clone() } else { resolved_c[key].clone() };
                     editor_cell(ui, on, &v);
                 }
                 ui.end_row();
                 if on != was {
                     if on {
-                        set = Some(json!({ key: resolved_p[key].clone() }));
+                        set = Some(json!({ key: resolved_c[key].clone() }));
                     } else {
                         clear.push(key);
                     }
                 }
             }
-        }
+            if paragraph {
+                let rows: &[(&str, &str, &str)] = &[
+                    (tl!("Align"), "align", "align"),
+                    (tl!("Indent First"), "first_line_indent_pt", "pt"),
+                    (tl!("Indent Left"), "start_indent_pt", "pt"),
+                    (tl!("Indent Right"), "end_indent_pt", "pt"),
+                    (tl!("Space Before"), "space_before_pt", "pt"),
+                    (tl!("Space After"), "space_after_pt", "pt"),
+                    // Hyphenate is stored and round-trips to PSD, but layout never hyphenates (#6710).
+                ];
+                for &(label, key, kind) in rows {
+                    let mut on = defined(&para_attrs, key);
+                    let was = on;
+                    // The checkbox registers first in both directions, so the keyboard focus order
+                    // and the editor's same-frame enable state match the left-to-right row.
+                    let mut editor_cell = |ui: &mut egui::Ui, on: bool, v: &Value| {
+                        ui.add_enabled_ui(on, |ui| match kind {
+                            "align" => {
+                                let mut a = v.as_str().unwrap_or("Left").to_string();
+                                // English values for the engine; labels go through `dropdown`'s `tl!`.
+                                let opts: Vec<(String, &str)> = [
+                                    ("Left", "Left"),
+                                    ("Center", "Center"),
+                                    ("Right", "Right"),
+                                    ("JustifyLeft", "Justify last left"),
+                                    ("JustifyCenter", "Justify last centered"),
+                                    ("JustifyRight", "Justify last right"),
+                                    ("JustifyAll", "Justify all"),
+                                ]
+                                .into_iter()
+                                .map(|(v, l)| (v.to_string(), l))
+                                .collect();
+                                if crate::widgets::dropdown(ui, &format!("style-align-{id}"), tl!("Alignment"), &mut a, &opts, 110.0) {
+                                    set = Some(json!({ "align": a }));
+                                }
+                            }
+                            "pt" => {
+                                let mut x = v.as_f64().unwrap_or(0.0) as f32 * type_unit;
+                                if crate::widgets::value_field(ui, &mut x, -1296.0 * type_unit..=1296.0 * type_unit, &format!(" {unit_label}"), 70.0)
+                                    .accessible_name(tl!(&label))
+                                    .changed()
+                                {
+                                    set = Some(json!({ key: x / type_unit }));
+                                }
+                            }
+                            _ => {
+                                let mut b = v.as_bool().unwrap_or(false);
+                                if ui.checkbox(&mut b, "").accessible_name(tl!(&label)).changed() {
+                                    set = Some(json!({ key: b }));
+                                }
+                            }
+                        });
+                    };
+                    if rtl {
+                        row(ui, |ui| {
+                            let on_box = ui.checkbox(&mut on, "");
+                            let row_label = ui.label(RichText::new(tl!(&label)).color(if on { t.text } else { t.text_faint }).size(11.5));
+                            on_box.labelled_by(row_label.id);
+                            let v = if on { para_attrs[key].clone() } else { resolved_p[key].clone() };
+                            editor_cell(ui, on, &v);
+                        });
+                    } else {
+                        let on_box = ui.checkbox(&mut on, "");
+                        let row_label = ui.label(RichText::new(tl!(&label)).color(if on { t.text } else { t.text_faint }).size(11.5));
+                        on_box.labelled_by(row_label.id);
+                        let v = if on { para_attrs[key].clone() } else { resolved_p[key].clone() };
+                        editor_cell(ui, on, &v);
+                    }
+                    ui.end_row();
+                    if on != was {
+                        if on {
+                            set = Some(json!({ key: resolved_p[key].clone() }));
+                        } else {
+                            clear.push(key);
+                        }
+                    }
+                }
+            }
+        });
     });
     library.finish(app);
     if let Some(attrs) = set {
