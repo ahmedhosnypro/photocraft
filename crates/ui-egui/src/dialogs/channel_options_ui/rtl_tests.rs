@@ -50,7 +50,10 @@ fn rtl_the_channel_options_body_mirrors() {
     let ltr_radio = ltr.get_by_label("Masked Areas").rect();
     let ltr_name = ltr.get_by_label("Name").rect();
     assert!((ltr_section.left() - ltr_frame.left()).abs() < 40.0, "the section label reads from the left: {ltr_section:?} in {ltr_frame:?}");
-    assert!((ltr_radio.left() - ltr_section.left()).abs() < 40.0 && ltr_radio.left() > ltr_section.left(), "the radios are indented from the left: {ltr_radio:?} vs {ltr_section:?}");
+    assert!(
+        (ltr_radio.left() - ltr_section.left()).abs() < 40.0 && ltr_radio.left() > ltr_section.left(),
+        "the radios are indented from the left: {ltr_radio:?} vs {ltr_section:?}"
+    );
     assert!(ltr_name.left() - ltr_radio.left() > 70.0, "the name field follows the caption column: {ltr_name:?} vs {ltr_radio:?}");
 
     let rtl = channel_options(crate::text::direction::Dir::Rtl);
@@ -76,9 +79,11 @@ fn rtl_the_channel_options_dialog_keeps_its_width() {
 /// the dialog keeps its left-to-right width.
 #[test]
 fn rtl_the_layer_mask_options_body_mirrors() {
-    let mask_options = |dir| dialog_in(dir, |app| {
-        open(app, &json!("mask")).unwrap();
-    });
+    let mask_options = |dir| {
+        dialog_in(dir, |app| {
+            open(app, &json!("mask")).unwrap();
+        })
+    };
     let ltr = mask_options(crate::text::direction::Dir::Ltr);
     let ltr_frame = frame(&ltr);
     let ltr_color = ltr.get_by_label("Overlay Color").rect();
@@ -101,9 +106,11 @@ fn rtl_the_layer_mask_options_body_mirrors() {
 /// name field follows its caption towards the reading end, and the width matches the LTR twin.
 #[test]
 fn rtl_the_new_spot_channel_body_mirrors() {
-    let new_spot = |dir| dialog_in(dir, |app| {
-        open_new_spot(app).unwrap();
-    });
+    let new_spot = |dir| {
+        dialog_in(dir, |app| {
+            open_new_spot(app).unwrap();
+        })
+    };
     let ltr = new_spot(crate::text::direction::Dir::Ltr);
     let ltr_frame = frame(&ltr);
     let ltr_section = ltr.get_by_label("Ink Characteristics").rect();
