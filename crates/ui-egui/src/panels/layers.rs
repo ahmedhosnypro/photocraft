@@ -632,24 +632,19 @@ mod tests {
         let _lang = crate::i18n::language_scope(crate::i18n::Lang::EN);
         for dir in [Dir::Ltr, Dir::Rtl] {
             let _dir = direction_scope(dir);
-            let mut h = egui_kittest::Harness::builder()
-                .with_size(egui::vec2(420.0, 160.0))
-                .build_ui_state(
-                    |ui, row: &mut Option<egui::Rect>| {
-                        *row = Some(ui.max_rect());
-                        super::inactive_blend_rows(ui, true);
-                    },
-                    None,
-                );
+            let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(420.0, 160.0)).build_ui_state(
+                |ui, row: &mut Option<egui::Rect>| {
+                    *row = Some(ui.max_rect());
+                    super::inactive_blend_rows(ui, true);
+                },
+                None,
+            );
             h.run_steps(3);
             let row = (*h.state()).expect("the row's rect was recorded");
             let blend = h.query_all_by_label("Blend Mode").next().expect("the blend dropdown is drawn").rect();
             // The field, its ▾ and the scrub label all carry the Opacity name; the field is the widest.
-            let opacity = h
-                .query_all_by_label_contains("Opacity")
-                .map(|n| n.rect())
-                .max_by(|a, b| a.width().total_cmp(&b.width()))
-                .expect("the Opacity field is drawn");
+            let opacity =
+                h.query_all_by_label_contains("Opacity").map(|n| n.rect()).max_by(|a, b| a.width().total_cmp(&b.width())).expect("the Opacity field is drawn");
             // The rows center their content (main_align Center), so assert the mirrored
             // halves, not an edge hug: dropdown on the reading-start half, field on the end half.
             let row_mid = row.center().x;
