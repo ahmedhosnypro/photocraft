@@ -1074,7 +1074,7 @@ mod tests {
         use egui_kittest::kittest::Queryable;
         for (rtl, mirrored) in [(false, false), (true, true)] {
             let _dir = crate::text::direction::direction_scope(if rtl { crate::text::direction::Dir::Rtl } else { crate::text::direction::Dir::Ltr });
-            let mut app = app_with_text("Hi");
+            let app = app_with_text("Hi");
             let mut h = egui_kittest::Harness::builder().with_size(vec2(1000.0, 700.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
             PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
             // The fonts are set up after the harness's first frame: the window appears after it.
@@ -1127,7 +1127,7 @@ mod tests {
         use egui_kittest::kittest::Queryable;
         for (rtl, after) in [(false, false), (true, true)] {
             let _dir = crate::text::direction::direction_scope(if rtl { crate::text::direction::Dir::Rtl } else { crate::text::direction::Dir::Ltr });
-            let mut app = app_with_text("Hi");
+            let app = app_with_text("Hi");
             let mut h = egui_kittest::Harness::builder().with_size(vec2(1000.0, 700.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
             PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
             // The fonts are set up after the harness's first frame: the windows appear after it.
