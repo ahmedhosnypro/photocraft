@@ -639,7 +639,10 @@ fn fields(ui: &mut egui::Ui, f: &mut Map<String, Value>, mode: &str, now: &Compo
     let &Components { rgb, hsv, lab, cmyk } = now;
     let mut edit: Option<([f32; 3], Keep)> = None;
     let mut new_mode: Option<&str> = None;
-    ui.horizontal_top(|ui| {
+    // Left-to-right even in RTL: egui's Grid places its first cell at the raw cursor, which is
+    // x = -inf at the start of a right-to-left row (the two column groups still mirror as blocks
+    // of the surrounding row).
+    crate::direction::ltr(ui, |ui| {
         ui.spacing_mut().item_spacing.x = 10.0;
         ui.vertical(|ui| {
             egui::Grid::new("cp-hsb-rgb").min_row_height(0.0).num_columns(4).spacing([4.0, 2.0]).show(ui, |ui| {
