@@ -331,8 +331,7 @@ pub(super) fn shortcuts_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut
         // The fork's grid cannot place its first row under a right-to-left cursor (x = -inf),
         // so the table runs in an explicit left-to-right scope; the cells below are emitted in
         // reading order, and the block itself stays at the scroll area's left edge.
-        let mut grid_ui =
-            ui.new_child(egui::UiBuilder::new().max_rect(ui.max_rect()).layout(egui::Layout::top_down(egui::Align::Min)));
+        let mut grid_ui = ui.new_child(egui::UiBuilder::new().max_rect(ui.max_rect()).layout(egui::Layout::top_down(egui::Align::Min)));
         egui::Grid::new("shortcut-grid").num_columns(3).spacing([12.0, 3.0]).striped(true).show(&mut grid_ui, |ui| {
             for (id, label, path, def) in &items {
                 if tab == 1 && crate::tool_shortcuts::tool(id).is_some() {
