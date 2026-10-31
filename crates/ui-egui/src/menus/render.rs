@@ -10,11 +10,13 @@ pub(super) fn render_level(ui: &mut egui::Ui, items: &[&MenuItem], depth: usize,
 /// them). Menu popups can be taller than the window: each level stays on screen and scrolls
 /// (wheel, scroll arrows, keyboard), like a native menu on a small display. This is the one
 /// place that scopes a level's body: egui pins the popup's own layout left-to-right, so in a
-/// right-to-left UI each level scopes its body itself — rows still fill the width (justified),
-/// blocks align to the reading start.
+/// right-to-left UI each level scopes its body itself. The cross align stays `Min`: rows fill
+/// the width (justified), and a `Max` align would seed the scope's `min_rect` at the far edge
+/// of the pinned `max_rect`, so the sizing pass would measure the popup at the full default
+/// area width instead of the rows' width.
 pub(super) fn render_level_with(ui: &mut egui::Ui, depth: usize, nav: &mut crate::menu_nav::Nav, pre: impl FnOnce(&mut egui::Ui, &mut crate::menu_nav::Nav)) {
     if ui.style().right_to_left {
-        ui.scope_builder(egui::UiBuilder::new().max_rect(ui.max_rect()).layout(egui::Layout::top_down_justified(egui::Align::Max)), |ui| {
+        ui.scope_builder(egui::UiBuilder::new().max_rect(ui.max_rect()).layout(egui::Layout::top_down_justified(egui::Align::Min)), |ui| {
             crate::menu_nav::level(ui, depth, nav, pre)
         });
     } else {
@@ -437,7 +439,7 @@ mod rtl_tests {
         assert!((ltr - rtl).abs() < 1.0, "popup width differs: ltr {ltr}, rtl {rtl}");
     }
 
-    /// The RTL `render_level` scope (justified `Align::Max` child pinned to the popup's
+    /// The RTL `render_level` scope (justified child pinned to the popup's
     /// `max_rect`) must not balloon its `min_rect` past the popup width, and the rows must still
     /// paint. Left-to-right, `render_level` stays the direct `menu_nav::level` call — the scope
     /// is not taken, so the painted geometry is identical to calling `level` directly.
