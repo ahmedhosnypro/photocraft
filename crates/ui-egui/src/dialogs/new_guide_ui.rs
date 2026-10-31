@@ -218,7 +218,9 @@ fn orientation_choices(ui: &mut egui::Ui, orientation: &mut String) {
 
 /// The Position field, named by its caption for accessibility.
 fn position_field(ui: &mut egui::Ui, position: &mut String, labelled_by: egui::Id) {
-    ui.add(egui::TextEdit::singleline(position).desired_width(120.0)).labelled_by(labelled_by);
+    // Numeric-by-content: the digits stay LTR, but under RTL the field right-aligns via the helper.
+    let mut layouter = crate::widgets::rtl_singleline_layouter(egui::FontId::default());
+    ui.add(crate::widgets::rtl_singleline(position, &mut layouter).desired_width(120.0)).labelled_by(labelled_by);
 }
 
 /// The Color choices: the dropdown, then the Custom… swatch and its hex when one is picked (the
