@@ -248,7 +248,8 @@ fn draw(ctx: &Context, open: &Open) -> Option<Action> {
                         ui.separator();
                         continue;
                     };
-                    let item = row_button(tl!(label), keys, rtl).min_size(egui::vec2(170.0, 20.0));
+                    let shortcut = if keys.is_empty() { None } else { Some(keys.to_owned()) };
+                    let item = crate::menu_keys::menu_row_button(tl!(label).into(), shortcut, rtl).min_size(egui::vec2(170.0, 20.0));
                     if ui.add_enabled(enabled(open, action), item).clicked() {
                         chosen = Some(action);
                     }
@@ -257,20 +258,6 @@ fn draw(ctx: &Context, open: &Open) -> Option<Action> {
         });
     });
     chosen
-}
-
-/// The menu's row: its label, with the shortcut at the row's reading end — the right in a
-/// left-to-right UI, the left in a right-to-left one, as the popup menu rows do.
-fn row_button(label: &'static str, keys: &str, rtl: bool) -> egui::Button<'static> {
-    let shortcut = if keys.is_empty() { None } else { Some(keys.to_owned()) };
-    let mut b = crate::menu_keys::menu_row_button(label.into(), shortcut, rtl);
-    if rtl && keys.is_empty() {
-        // A row without a shortcut has no spacer: give it one, so its label hugs the reading
-        // start like every other row's. `left_text` adds a spacer of its own, so the atom
-        // given here is empty and adds no width.
-        b = b.left_text(egui::Atom::default());
-    }
-    b
 }
 
 /// Do `action` in `field`: give it its focus back and the input that does the same from the
@@ -300,7 +287,7 @@ mod tests {
     use egui_kittest::kittest::Queryable;
     use serde_json::json;
 
-    use super::{open_on, row_button};
+    use super::open_on;
     use crate::PhotocraftApp;
     use crate::layer_row_ui::{rename, start_rename};
 
@@ -413,7 +400,7 @@ mod tests {
     /// end; in a right-to-left one it leads it, at the far end there.
     #[test]
     fn the_shortcut_sits_at_the_rows_far_end() {
-        let texts = |rtl: bool| row_button("Undo", "Cmd+Z", rtl).atoms().iter_texts().map(|t| t.text().to_owned()).collect::<Vec<_>>();
+        let texts = |rtl: bool| crate::menu_keys::menu_row_button("Undo".into(), Some("Cmd+Z".to_string()), rtl).atoms().iter_texts().map(|t| t.text().to_owned()).collect::<Vec<_>>();
         let shortcut = crate::shortcuts::pretty("Cmd+Z");
         assert_eq!(texts(false), vec!["Undo".to_owned(), shortcut.clone()], "the shortcut follows the label");
         assert_eq!(texts(true), vec![shortcut, "Undo".to_owned()], "and leads it in a right-to-left row");
@@ -423,12 +410,12 @@ mod tests {
     /// right-to-left menu, so its label hugs the reading start like every other row's.
     #[test]
     fn a_row_without_a_shortcut_keeps_its_label_at_the_reading_start() {
-        let ltr = row_button("Delete", "", false);
+        let ltr = crate::menu_keys::menu_row_button("Delete".into(), None, false);
         let atoms = ltr.atoms();
         assert_eq!(atoms.len(), 1, "a left-to-right row has no spacer");
         assert!(matches!(&atoms[0].kind, egui::AtomKind::Text(t) if t.text() == "Delete"), "and its label is the row");
 
-        let rtl = row_button("Delete", "", true);
+        let rtl = crate::menu_keys::menu_row_button("Delete".into(), None, true);
         let atoms = rtl.atoms();
         let label = atoms.iter().position(|a| matches!(&a.kind, egui::AtomKind::Text(t) if t.text() == "Delete")).expect("the label");
         assert_eq!(label, atoms.len() - 1, "the label is the last atom, so the spacer pushes it to the reading end");
