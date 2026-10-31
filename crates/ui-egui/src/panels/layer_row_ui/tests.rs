@@ -736,6 +736,46 @@ fn eye_column_edges_toggle_visibility_without_selecting_layer() {
 
 /// #1662: a hidden layer's eye box stays empty, as in Photoshop (only a visible layer paints its
 /// eye), in every theme; the widened hit area (#8467) changes nothing that is drawn.
+/// The panel flyout is measured during the popup's sizing pass, whose max_rect is the wide
+/// default area size (600 px): a right-to-left body that anchors its rows to the reading end
+/// of that wide rect balloons the popup. The RTL scope must measure no wider than LTR for the
+/// same content (the LTR branch is the untouched, pixel-identical oracle).
+#[test]
+fn the_panel_menu_body_does_not_grow_wider_in_rtl() {
+    use crate::direction::{Dir, direction_scope};
+    let menu_width = |dir: Dir| -> f32 {
+        let _scope = direction_scope(dir);
+        let ctx = egui::Context::default();
+        crate::PhotocraftApp::setup_context(&ctx, crate::theme::ThemeKind::ALL[0]);
+        ctx.all_styles_mut(|s| s.right_to_left = dir == Dir::Rtl);
+        let mut session = photocraft_engine::Session::new();
+        session.execute("file.new", json!({"width": 64, "height": 48})).unwrap();
+        session.execute("layer.new.layer", json!({})).unwrap();
+        let mut app = PhotocraftApp::new(session, crate::Services::default());
+        let mut width = 0.0;
+        ctx.run_ui(egui::RawInput::default(), |ui| {
+            // The popup's sizing-pass ui: the default area size as max_rect, the menu's
+            // justified layout, and sizing_pass on (the fork shrinks justified layouts then).
+            ui.scope_builder(
+                egui::UiBuilder::new()
+                    .max_rect(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(600.0, 400.0)))
+                    .layout(egui::Layout::top_down_justified(egui::Align::Min))
+                    .sizing_pass(),
+                |ui| {
+                    ui.set_min_width(180.0);
+                    super::panel_menu(&mut app, ui);
+                    width = ui.min_rect().width();
+                },
+            );
+        });
+        width
+    };
+    let ltr = menu_width(Dir::Ltr);
+    let rtl = menu_width(Dir::Rtl);
+    assert!(ltr < 600.0, "ltr sanity: the body measured the wide sizing rect ({ltr})");
+    assert!(rtl <= ltr + 0.5, "the menu body grew in RTL: ltr {ltr} vs rtl {rtl}");
+}
+
 #[test]
 fn a_hidden_layers_eye_box_paints_nothing() {
     fn bounds(shape: &egui::Shape, out: &mut Vec<Rect>) {
