@@ -92,11 +92,7 @@ pub fn exists(name: &str) -> bool {
 pub fn image(name: &str, size: f32, tint: Color32) -> egui::Image<'static> {
     let name = icon_name(name);
     let img = image_raw(name, size, tint);
-    if icon_flipped(name) {
-        img.uv(Rect::from_min_max(egui::pos2(1.0, 0.0), egui::pos2(0.0, 1.0)))
-    } else {
-        img
-    }
+    if icon_flipped(name) { img.uv(Rect::from_min_max(egui::pos2(1.0, 0.0), egui::pos2(0.0, 1.0))) } else { img }
 }
 
 /// The un-mirrored icon: canvas cursors and badges, and the opt-out for glyphs that point at
@@ -586,9 +582,7 @@ mod tests {
         assert_eq!(icon_name("chevron-left"), "chevron-right");
         for size in [14_u32, 28] {
             let s = size as usize;
-            let column = |mask: &[bool], x: usize| {
-                (0..s).filter(|y| mask.get(y * s + x).copied().unwrap_or(false)).count()
-            };
+            let column = |mask: &[bool], x: usize| (0..s).filter(|y| mask.get(y * s + x).copied().unwrap_or(false)).count();
             let left = ink("chevron-left", size);
             let right = ink("chevron-right", size);
             for x in 0..s {
