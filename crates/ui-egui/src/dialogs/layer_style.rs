@@ -1911,6 +1911,8 @@ mod rtl_tests {
         let rtl = body_harness(Dir::Rtl, STYLES_PAGE);
         let rtl_title = labelled(&rtl, "Styles");
         let rtl_button = button(&rtl, "New Style…");
+        eprintln!("DBG LTR title={ltr_title:?} button={ltr_button:?}");
+        eprintln!("DBG RTL title={rtl_title:?} button={rtl_button:?}");
         assert!(ltr_button.left() > ltr_title.right(), "LTR: the button follows the title");
         assert!(rtl_button.right() < rtl_title.left(), "RTL: the button precedes the title");
         let ltr_gap = ltr_button.right() - ltr_title.left();
@@ -1929,6 +1931,8 @@ mod rtl_tests {
         let rtl = body_harness(Dir::Rtl, "dropShadow");
         let rtl_title = labelled(&rtl, "Drop Shadow");
         let rtl_group = button(&rtl, "Reset to Default").union(button(&rtl, "Make Default"));
+        eprintln!("DBG LTR title={ltr_title:?} group={ltr_group:?}");
+        eprintln!("DBG RTL title={rtl_title:?} group={rtl_group:?}");
         assert!(ltr_group.right() > ltr_title.left() + 200.0, "LTR: the group hugs the right end: {ltr_group:?}");
         assert!(rtl_group.left() < rtl_title.right() - 200.0, "RTL: the group hugs the left end: {rtl_group:?}");
         let ltr_gap = ltr_group.right() - ltr_title.left();
