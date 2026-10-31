@@ -240,16 +240,20 @@ fn draw(ctx: &Context, open: &Open) -> Option<Action> {
             // One source of truth with the popup rows (menus/render.rs): the style flag, so
             // atom placement can never disagree with the fork's glyph/align mirroring.
             let rtl = ui.style().right_to_left;
-            for row in ROWS {
-                let Some((label, keys, action)) = *row else {
-                    ui.separator();
-                    continue;
-                };
-                let item = row_button(tl!(label), keys, rtl).min_size(egui::vec2(170.0, 20.0));
-                if ui.add_enabled(enabled(open, action), item).clicked() {
-                    chosen = Some(action);
+            // The Area body has no direction of its own; scope it like a window body so the
+            // rows hug the reading-start edge in a right-to-left UI (LTR unchanged).
+            ui.with_layout(crate::direction::body_layout(), |ui| {
+                for row in ROWS {
+                    let Some((label, keys, action)) = *row else {
+                        ui.separator();
+                        continue;
+                    };
+                    let item = row_button(tl!(label), keys, rtl).min_size(egui::vec2(170.0, 20.0));
+                    if ui.add_enabled(enabled(open, action), item).clicked() {
+                        chosen = Some(action);
+                    }
                 }
-            }
+            });
         });
     });
     chosen
