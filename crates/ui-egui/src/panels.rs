@@ -513,15 +513,13 @@ mod empty_state_direction_tests {
         for dir in [Dir::Ltr, Dir::Rtl] {
             let _dir = direction_scope(dir);
             let app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
-            let mut h = Harness::builder()
-                .with_size(vec2(300.0, 120.0))
-                .build_ui_state(
-                    |ui, state: &mut (PhotocraftApp, Option<Rect>)| {
-                        state.1 = Some(ui.max_rect());
-                        layers(&mut state.0, ui);
-                    },
-                    (app, None::<Rect>),
-                );
+            let mut h = Harness::builder().with_size(vec2(300.0, 120.0)).build_ui_state(
+                |ui, state: &mut (PhotocraftApp, Option<Rect>)| {
+                    state.1 = Some(ui.max_rect());
+                    layers(&mut state.0, ui);
+                },
+                (app, None::<Rect>),
+            );
             PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
             h.run_steps(3);
             let body = h.state().1.expect("the group body's rect was recorded");
@@ -529,7 +527,10 @@ mod empty_state_direction_tests {
             if dir == Dir::Ltr {
                 assert!(label.left() - body.left() <= 1.0 && label.right() < body.center().x, "LTR: the label hugs the left edge: {label:?} in {body:?}");
             } else {
-                assert!(body.right() - label.right() <= 1.0 && label.left() > body.center().x, "RTL: the label hugs the right (reading-start) edge: {label:?} in {body:?}");
+                assert!(
+                    body.right() - label.right() <= 1.0 && label.left() > body.center().x,
+                    "RTL: the label hugs the right (reading-start) edge: {label:?} in {body:?}"
+                );
             }
         }
     }
