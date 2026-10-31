@@ -1807,6 +1807,7 @@ mod tests;
 #[cfg(test)]
 mod rtl_tests {
     use super::*;
+    use egui_kittest::kittest::Queryable;
     use crate::direction::{Dir, direction_scope};
 
     /// A 200-point-wide effect row, the width the dialog gives every row.
@@ -1913,6 +1914,9 @@ mod rtl_tests {
         let rtl_button = button(&rtl, "New Style…");
         eprintln!("DBG LTR title={ltr_title:?} button={ltr_button:?}");
         eprintln!("DBG RTL title={rtl_title:?} button={rtl_button:?}");
+        for n in ltr.query_all_by_label("Styles") { eprintln!("DBG LTR Styles node={:?}", n.rect()); }
+        for n in rtl.query_all_by_label("Styles") { eprintln!("DBG RTL Styles node={:?}", n.rect()); }
+        for n in rtl.query_all_by_label("OK") { eprintln!("DBG RTL OK node={:?}", n.rect()); }
         assert!(ltr_button.left() > ltr_title.right(), "LTR: the button follows the title");
         assert!(rtl_button.right() < rtl_title.left(), "RTL: the button precedes the title");
         let ltr_gap = ltr_button.right() - ltr_title.left();
@@ -1933,6 +1937,8 @@ mod rtl_tests {
         let rtl_group = button(&rtl, "Reset to Default").union(button(&rtl, "Make Default"));
         eprintln!("DBG LTR title={ltr_title:?} group={ltr_group:?}");
         eprintln!("DBG RTL title={rtl_title:?} group={rtl_group:?}");
+        for n in ltr.query_all_by_label("Drop Shadow") { eprintln!("DBG LTR DS node={:?}", n.rect()); }
+        for n in rtl.query_all_by_label("Drop Shadow") { eprintln!("DBG RTL DS node={:?}", n.rect()); }
         assert!(ltr_group.right() > ltr_title.left() + 200.0, "LTR: the group hugs the right end: {ltr_group:?}");
         assert!(rtl_group.left() < rtl_title.right() - 200.0, "RTL: the group hugs the left end: {rtl_group:?}");
         let ltr_gap = ltr_group.right() - ltr_title.left();
