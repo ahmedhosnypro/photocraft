@@ -1905,7 +1905,15 @@ fn rtl_section_lock_sits_on_the_left_and_toggles() {
     assert!(lock.rect().left() <= row.left() + 22.0);
     assert!(!h.state().session.tools.brush.locks.scattering);
     assert_eq!(h.state().ui.brush_section, 0);
+    {
+        use egui_kittest::kittest::NodeT;
+        eprintln!("DBG is_rtl={} row={row:?} lock={:?}", crate::direction::is_rtl(), lock.rect());
+        for n in h.query_all(egui_kittest::kittest::by().label("Scattering").include_labels()) {
+            eprintln!("DBG scattering node rect={:?} role={:?}", n.rect(), n.accesskit_node().role());
+        }
+    }
     click_at(&mut h, egui::pos2(row.left() + 11.0, row.center().y));
+    eprintln!("DBG after click locks.scattering={} section={}", h.state().session.tools.brush.locks.scattering, h.state().ui.brush_section);
     assert!(h.state().session.tools.brush.locks.scattering, "the mirrored lock zone still toggles the lock");
     assert_eq!(h.state().ui.brush_section, 0, "the lock stays a separate target");
 }
@@ -1972,6 +1980,7 @@ fn rtl_columns_swap_sections_right_options_left() {
     let (rtl, h) = rtl_harness(0, 0);
     let sections = h.get_by_label("Brush Tip Shape").rect();
     let options = caption_rect(&h, "Size");
+    eprintln!("DBG cols is_rtl={} sections={sections:?} options={options:?}", crate::direction::is_rtl());
     assert!(options.left() < sections.left(), "the options pane sits left of the sections in RTL: {options:?} {sections:?}");
 
     drop(rtl);

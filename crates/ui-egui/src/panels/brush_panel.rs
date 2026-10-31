@@ -292,6 +292,9 @@ fn section_list(app: &mut PhotocraftApp, ui: &mut egui::Ui, b: &mut BrushSetting
                 ui.painter().rect_filled(r, t.radius_sm, t.hover);
             }
             let mut x = if rtl { r.right() - 6.0 } else { r.left() + 6.0 };
+            // The lock zone at the row's reading end is part of the row's hit rect too; a click
+            // landing there toggles the lock whichever of the two widgets the hit test picks.
+            let on_lock = resp.interact_pointer_pos().is_some_and(|p| if rtl { p.x < r.left() + 22.0 } else { p.x > r.right() - 22.0 });
             if *has_box && let Some(flag) = section_flag(b, i) {
                 let br = egui::Rect::from_center_size(egui::pos2(x + 6.0 * s, r.center().y), vec2(13.0, 13.0));
                 // A checkbox-only row is one accessible checkbox across its whole width. A
@@ -303,7 +306,6 @@ fn section_list(app: &mut PhotocraftApp, ui: &mut egui::Ui, b: &mut BrushSetting
                     });
                     resp
                 });
-                let on_lock = resp.interact_pointer_pos().is_some_and(|p| if rtl { p.x < r.left() + 22.0 } else { p.x > r.right() - 22.0 });
                 // A press on the row (but not its lock) presses the box too: a release there
                 // turns the section on, or toggles a checkbox-only row (#4476).
                 let pressed = box_resp.as_ref().is_some_and(|b| b.is_pointer_button_down_on()) || (resp.is_pointer_button_down_on() && !on_lock);
@@ -341,7 +343,7 @@ fn section_list(app: &mut PhotocraftApp, ui: &mut egui::Ui, b: &mut BrushSetting
                 }
                 let tip =
                     if *lock { tl!("Unlock: picking a preset replaces these settings") } else { tl!("Lock: keep these settings when picking another preset") };
-                if lresp.on_hover_text(tip).clicked() {
+                if lresp.on_hover_text(tip).clicked() || (resp.clicked() && on_lock) {
                     *lock = !*lock;
                     lock_clicked = true;
                 }
@@ -366,7 +368,10 @@ fn settings_tab(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         app.ui.brush_section = 0;
     }
     let section = app.ui.brush_section;
-    ui.horizontal_top(|ui| {
+    // The columns follow the direction explicitly: sections lead (right in RTL), options follow.
+    let cols = if crate::direction::is_rtl() { egui::Layout::right_to_left(egui::Align::Min) } else { egui::Layout::left_to_right(egui::Align::Min) };
+    let cols_size = ui.available_size_before_wrap();
+    ui.allocate_ui_with_layout(cols_size, cols, |ui| {
         section_list(app, ui, &mut b);
         widgets::vline(ui, 482.0);
         ui.vertical(|ui| {
