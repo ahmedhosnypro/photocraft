@@ -471,11 +471,7 @@ mod tests {
         assert!(link.right() > 250.0, "RTL link icon hugs the right edge: {link:?}");
         assert!(w.0 > 190.0, "RTL W label sits at the reading start: {w:?}");
         assert!(field.right() < w.0, "RTL Width field left of its label: {field:?} vs {w:?}");
-        assert!(
-            w.0 - field.right() < 40.0,
-            "RTL W label stays adjacent to its field: gap {}",
-            w.0 - field.right()
-        );
+        assert!(w.0 - field.right() < 40.0, "RTL W label stays adjacent to its field: gap {}", w.0 - field.right());
     }
 
     #[test]
