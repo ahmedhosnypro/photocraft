@@ -96,11 +96,7 @@ pub fn section(ui: &mut egui::Ui, id: &str, title: &str) -> bool {
         11.0,
         t.text_dim,
     );
-    let (title_x, title_align) = if rtl {
-        (r.right() - 18.0, egui::Align2::RIGHT_CENTER)
-    } else {
-        (r.left() + 18.0, egui::Align2::LEFT_CENTER)
-    };
+    let (title_x, title_align) = if rtl { (r.right() - 18.0, egui::Align2::RIGHT_CENTER) } else { (r.left() + 18.0, egui::Align2::LEFT_CENTER) };
     ui.painter().text(pos2(title_x, r.center().y), title_align, tl!(title), theme::semibold(12.0), t.text);
     if resp.clicked() {
         open = !open;
@@ -253,11 +249,7 @@ mod rtl_tests {
         );
         crate::PhotocraftApp::setup_context(&h.ctx, Default::default());
         h.run_steps(4);
-        let row = sections_drawn(&h.ctx)
-            .into_iter()
-            .find(|(title, _)| title == "Appearance")
-            .map(|(_, r)| r)
-            .unwrap_or_else(|| panic!("the section row"));
+        let row = sections_drawn(&h.ctx).into_iter().find(|(title, _)| title == "Appearance").map(|(_, r)| r).unwrap_or_else(|| panic!("the section row"));
         (painted_text(&h, "Appearance"), painted_icon(&h, row), row)
     }
 
@@ -297,21 +289,12 @@ mod rtl_tests {
     #[test]
     fn section_header_reads_from_the_right_in_rtl() {
         let (ltr_title, ltr_chev, ltr_row) = section_header(Dir::Ltr);
-        assert!(
-            (ltr_title.left() - (ltr_row.left() + 18.0)).abs() < 1.0,
-            "LTR: the title starts 18 px into its row: {ltr_title:?} {ltr_row:?}"
-        );
-        assert!(
-            (ltr_chev.center().x - (ltr_row.left() + 7.0)).abs() < 1.0,
-            "LTR: the chevron leads 7 px into its row: {ltr_chev:?} {ltr_row:?}"
-        );
+        assert!((ltr_title.left() - (ltr_row.left() + 18.0)).abs() < 1.0, "LTR: the title starts 18 px into its row: {ltr_title:?} {ltr_row:?}");
+        assert!((ltr_chev.center().x - (ltr_row.left() + 7.0)).abs() < 1.0, "LTR: the chevron leads 7 px into its row: {ltr_chev:?} {ltr_row:?}");
         assert!(ltr_chev.right() <= ltr_title.left(), "LTR: the chevron stays before the title: {ltr_chev:?} {ltr_title:?}");
 
         let (rtl_title, rtl_chev, rtl_row) = section_header(Dir::Rtl);
-        assert!(
-            (rtl_title.right() - (rtl_row.right() - 18.0)).abs() < 1.0,
-            "RTL: the title ends 18 px before its row's right edge: {rtl_title:?} {rtl_row:?}"
-        );
+        assert!((rtl_title.right() - (rtl_row.right() - 18.0)).abs() < 1.0, "RTL: the title ends 18 px before its row's right edge: {rtl_title:?} {rtl_row:?}");
         assert!(
             (rtl_chev.center().x - (rtl_row.right() - 7.0)).abs() < 1.0,
             "RTL: the chevron leads 7 px before its row's right edge: {rtl_chev:?} {rtl_row:?}"
