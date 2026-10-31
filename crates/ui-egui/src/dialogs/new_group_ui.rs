@@ -218,16 +218,12 @@ mod rtl_tests {
             let _dir = crate::direction::direction_scope(dir);
             let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
             app.run("file.new", json!({"width": 64, "height": 64})).unwrap();
-            let mut h = egui_kittest::Harness::builder()
-                .with_size(egui::vec2(1280.0, 800.0))
-                .build_ui_state(|ui, app| crate::dialogs::show(app, ui.ctx()), app);
+            let mut h =
+                egui_kittest::Harness::builder().with_size(egui::vec2(1280.0, 800.0)).build_ui_state(|ui, app| crate::dialogs::show(app, ui.ctx()), app);
             PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
             let id = open(h.state_mut(), NEW_GROUP);
             h.run_steps(4);
-            h.ctx
-                .memory(|m| m.area_rect(egui::Id::unique(("dialog", id))))
-                .expect("the dialog is on screen")
-                .width()
+            h.ctx.memory(|m| m.area_rect(egui::Id::unique(("dialog", id)))).expect("the dialog is on screen").width()
         }
         let ltr = width(Dir::Ltr);
         let rtl = width(Dir::Rtl);
