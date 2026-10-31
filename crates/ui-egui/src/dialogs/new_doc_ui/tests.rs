@@ -928,4 +928,33 @@ mod dialog {
             assert_eq!(created(&h), (2100, 1500, 300.0));
         }
     }
+
+    /// The preset-details name field runs right-to-left in a right-to-left UI: its galley is
+    /// right-aligned with a right-to-left paragraph base direction; LTR keeps egui's default
+    /// left-aligned, auto-direction edit.
+    #[test]
+    fn the_name_field_galley_is_rtl_in_rtl_and_ltr_in_ltr() {
+        let _lang = crate::i18n::language_scope(crate::i18n::Lang::EN);
+        for (dir, rtl) in [(crate::i18n::Dir::Ltr, false), (crate::i18n::Dir::Rtl, true)] {
+            let _dir = crate::text::direction::direction_scope(dir);
+            let h = harness();
+            let field = h.query_all_by_role(Role::TextInput).next().expect("the name field").rect();
+            fn galley<'a>(shape: &'a egui::Shape, text: &str) -> Option<(&'a egui::Galley, egui::Pos2)> {
+                match shape {
+                    egui::Shape::Text(t) if t.galley.job.text == text => Some((&t.galley, t.pos)),
+                    egui::Shape::Vec(shapes) => shapes.iter().find_map(|s| galley(s, text)),
+                    _ => None,
+                }
+            }
+            let (g, pos) = h.output().shapes.iter().find_map(|s| galley(&s.shape, "Untitled-1")).expect("the name's galley");
+            let want_dir = if rtl { egui::epaint::text::TextDirection::RightToLeft } else { egui::epaint::text::TextDirection::Auto };
+            assert_eq!(g.job.direction, want_dir, "{dir:?}: paragraph base direction");
+            let rect = egui::Rect::from_min_size(pos, g.size());
+            if rtl {
+                assert!(rect.right() > field.center().x, "{dir:?}: galley right-aligned in {field:?}, got {rect:?}");
+            } else {
+                assert!(rect.left() < field.center().x, "{dir:?}: galley left-aligned in {field:?}, got {rect:?}");
+            }
+        }
+    }
 }
