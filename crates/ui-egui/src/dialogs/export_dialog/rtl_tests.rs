@@ -58,17 +58,11 @@ fn the_export_body_mirrors_in_a_right_to_left_ui() {
     assert!(ltr.resolution.right() < ltr.depth.left(), "LTR: the label reads before the dropdown");
     assert!(ltr.settings.left() < ltr.estimate.left(), "LTR: the settings pane comes first");
     // LTR: the settings pane is the reading-start pane; its heading sits at the row's left edge.
-    assert!(
-        ltr.settings.left() <= ltr.resolution.left().min(ltr.estimate.left()),
-        "LTR: the settings pane is at the reading start"
-    );
+    assert!(ltr.settings.left() <= ltr.resolution.left().min(ltr.estimate.left()), "LTR: the settings pane is at the reading start");
 
     let rtl = render(crate::direction::Dir::Rtl);
     assert!(rtl.depth.right() < rtl.resolution.left(), "RTL: the label reads after the dropdown");
     assert!(rtl.estimate.left() < rtl.settings.left(), "RTL: the settings pane comes last");
     // RTL: the settings pane is still the reading-start pane, now at the row's right edge.
-    assert!(
-        rtl.settings.right() >= rtl.resolution.right().max(rtl.estimate.right()),
-        "RTL: the settings pane hugs the reading edge"
-    );
+    assert!(rtl.settings.right() >= rtl.resolution.right().max(rtl.estimate.right()), "RTL: the settings pane hugs the reading edge");
 }
