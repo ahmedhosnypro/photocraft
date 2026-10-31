@@ -383,7 +383,7 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                     // Popup::menu pins its body top_down_justified(Align::Min), which stays
                     // left-to-right whatever the direction flag; the shared popup body scopes
                     // itself under RTL, like every menu bar popup.
-                    let mut rows = |ui: &mut egui::Ui| {
+                    let rows = |ui: &mut egui::Ui| {
                         for (id, label) in [
                             ("view.screenMode.standard", tl!("Standard Screen Mode")),
                             ("view.screenMode.fullScreenWithMenuBar", tl!("Full Screen Mode With Menu Bar")),
