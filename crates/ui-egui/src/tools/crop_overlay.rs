@@ -287,7 +287,7 @@ pub fn options_button(o: &mut ToolOptions, ui: &mut egui::Ui) {
         crate::icons::button(ui, "grid-3x3", 24.0, false, &format!("{}  ({})", tl!("Set the overlay options for the Crop tool"), tl!(o.crop_overlay.label())));
     egui::Popup::menu(&r).show(|ui| crate::menus::popup_body(ui, |ui| {
         ui.set_min_width(220.0);
-        let item = |ui: &mut egui::Ui, on: bool, label: &str, key: Option<&str>| ui.add(overlay_row(ui, on, label, key)).clicked();
+        let item = |ui: &mut egui::Ui, on: bool, label: &str, key: Option<&str>| crate::menu_keys::menu_row(ui, label, key, on, true).clicked();
         for k in CropOverlay::ALL {
             if item(ui, o.crop_overlay == k, tl!(k.label()), None) {
                 set_overlay(o, k);
@@ -307,32 +307,11 @@ pub fn options_button(o: &mut ToolOptions, ui: &mut egui::Ui) {
             ui.close();
         }
         let turns = o.crop_overlay.orientations() > 1;
-        let b = overlay_row(ui, false, tl!("Cycle Orientation"), Some("Shift+O"));
-        if ui.add_enabled(turns, b).clicked() {
+        if crate::menu_keys::menu_row(ui, tl!("Cycle Orientation"), Some("Shift+O"), false, turns).clicked() {
             cycle_orientation(o);
             ui.close();
         }
     }));
-}
-
-/// One row of the overlay menu: the menu bar's row shape — the checkmark column at the reading
-/// start, the label, and the shortcut at the row's far end (its left in a right-to-left UI, since
-/// a plain button lays its atoms out left-to-right whatever the direction).
-fn overlay_row_text(ui: &egui::Ui, checked: bool, label: &str) -> egui::WidgetText {
-    crate::menu_keys::menu_row_text(ui, checked, label, None, false, crate::menu_keys::GutterSide::ReadingStart)
-}
-
-/// The row's button, with its shortcut (`key`) at the row's far end.
-fn overlay_row(ui: &egui::Ui, checked: bool, label: &str, key: Option<&str>) -> egui::Button<'static> {
-    let rtl = ui.style().right_to_left;
-    let text = overlay_row_text(ui, checked, label);
-    let mut b = crate::menu_keys::menu_row_button(text, key.map(str::to_owned), rtl);
-    if rtl && key.is_none() {
-        // A row without a shortcut has no spacer: give it one, so its label (and the
-        // checkmark column) hugs the reading start like every other row's.
-        b = b.left_text(egui::Atom::grow());
-    }
-    b
 }
 
 #[cfg(test)]
@@ -582,8 +561,8 @@ mod tests {
             let mut out: Option<(egui::WidgetText, Vec<egui::Atom<'static>>)> = None;
             egui::__run_test_ui(|ui| {
                 ui.style_mut().set_right_to_left(rtl);
-                let text = super::overlay_row_text(ui, true, "Golden Spiral");
-                let button = super::overlay_row(ui, true, "Golden Spiral", key);
+                let text = crate::menu_keys::menu_row_text(ui, true, "Golden Spiral", None, false, crate::menu_keys::GutterSide::ReadingStart);
+                let button = crate::menu_keys::menu_row_button(text.clone(), key.map(str::to_owned), rtl);
                 out = Some((text, button.atoms().iter().cloned().collect()));
             });
             out.expect("the row")
