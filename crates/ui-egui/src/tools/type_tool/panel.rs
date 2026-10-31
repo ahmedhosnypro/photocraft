@@ -595,19 +595,16 @@ mod rtl_tests {
     /// The Character panel as drawn in `dir`.
     fn panel(dir: Dir) -> Harness<'static, PhotocraftApp> {
         let _dir = direction_scope(dir);
-        let mut h = Harness::builder()
-            .with_size(egui::vec2(340.0, 700.0))
-            .with_max_steps(8)
-            .build_ui_state(
-                move |ui, app: &mut PhotocraftApp| {
-                    // The fonts are installed after the harness is built: the first frame has
-                    // none, and the panel's captions would panic without them.
-                    if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
-                        character_panel(app, ui, false);
-                    }
-                },
-                app_with_type(),
-            );
+        let mut h = Harness::builder().with_size(egui::vec2(340.0, 700.0)).with_max_steps(8).build_ui_state(
+            move |ui, app: &mut PhotocraftApp| {
+                // The fonts are installed after the harness is built: the first frame has
+                // none, and the panel's captions would panic without them.
+                if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    character_panel(app, ui, false);
+                }
+            },
+            app_with_type(),
+        );
         PhotocraftApp::setup_context(&h.ctx, Default::default());
         h.run_steps(4);
         h
@@ -656,17 +653,14 @@ mod rtl_tests {
     /// The Properties panel body as drawn in `dir`.
     fn props_panel(dir: Dir) -> Harness<'static, PhotocraftApp> {
         let _dir = direction_scope(dir);
-        let mut h = Harness::builder()
-            .with_size(egui::vec2(340.0, 1700.0))
-            .with_max_steps(8)
-            .build_ui_state(
-                move |ui, app: &mut PhotocraftApp| {
-                    if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
-                        type_properties(app, ui);
-                    }
-                },
-                app_with_type(),
-            );
+        let mut h = Harness::builder().with_size(egui::vec2(340.0, 1700.0)).with_max_steps(8).build_ui_state(
+            move |ui, app: &mut PhotocraftApp| {
+                if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    type_properties(app, ui);
+                }
+            },
+            app_with_type(),
+        );
         PhotocraftApp::setup_context(&h.ctx, Default::default());
         h.run_steps(4);
         h
