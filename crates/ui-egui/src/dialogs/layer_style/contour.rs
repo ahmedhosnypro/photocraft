@@ -675,6 +675,8 @@ mod row_tests {
         assert!(ltr_contour.top() - ltr_above < 12.0, "LTR: the row hugs the row above, one band tall: {ltr_contour:?}");
         assert!(ltr_aa.left() > ltr_contour.right(), "LTR: the label reads before the controls: {ltr_contour:?} {ltr_aa:?}");
         let (rtl_above, rtl_contour, rtl_aa) = contour_row(Dir::Rtl);
+        eprintln!("DBG LTR above={ltr_above} contour={ltr_contour:?} aa={ltr_aa:?}");
+        eprintln!("DBG RTL above={rtl_above} contour={rtl_contour:?} aa={rtl_aa:?}");
         assert!(rtl_contour.top() - rtl_above < 12.0, "RTL: same band, not the remaining column height: {rtl_contour:?}");
         assert!(rtl_aa.right() < rtl_contour.left(), "RTL: the label sits at the reading start: {rtl_contour:?} {rtl_aa:?}");
         assert!((ltr_contour.top() - rtl_contour.top()).abs() < 2.0, "the mirroring moves x, not y: {ltr_contour:?} {rtl_contour:?}");
