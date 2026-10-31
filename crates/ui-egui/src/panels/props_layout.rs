@@ -220,18 +220,17 @@ mod rtl_tests {
 
     /// The painted box of the textured mesh (an icon image) inside `within`.
     fn painted_icon(h: &Harness<'_, ()>, within: egui::Rect) -> egui::Rect {
-        h.output()
-            .shapes
-            .iter()
-            .filter_map(|shape| match &shape.shape {
+        fn find_mesh(shape: &egui::Shape, within: egui::Rect) -> Option<egui::Rect> {
+            match shape {
                 egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default() => {
                     let r = m.calc_bounds();
                     r.intersects(within).then_some(r)
                 }
+                egui::Shape::Vec(v) => v.iter().find_map(|s| find_mesh(s, within)),
                 _ => None,
-            })
-            .next()
-            .unwrap_or_else(|| panic!("the painted icon"))
+            }
+        }
+        h.output().shapes.iter().find_map(|cs| find_mesh(&cs.shape, within)).unwrap_or_else(|| panic!("the painted icon"))
     }
 
     /// A section header drawn in `dir`: its title box, its chevron box, and the row it sits in.
