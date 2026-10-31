@@ -218,19 +218,21 @@ mod rtl_tests {
             .unwrap_or_else(|| panic!("the painted `{text}`"))
     }
 
-    /// The painted box of the textured mesh (an icon image) inside `within`.
+    /// The painted box of the icon image inside `within`: egui paints an image as a
+    /// textured rect (or a textured mesh when rotated).
     fn painted_icon(h: &Harness<'_, ()>, within: egui::Rect) -> egui::Rect {
-        fn find_mesh(shape: &egui::Shape, within: egui::Rect) -> Option<egui::Rect> {
+        fn find_icon(shape: &egui::Shape, within: egui::Rect) -> Option<egui::Rect> {
             match shape {
+                egui::Shape::Rect(r) if r.brush.is_some() => r.rect.intersects(within).then_some(r.rect),
                 egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default() => {
                     let r = m.calc_bounds();
                     r.intersects(within).then_some(r)
                 }
-                egui::Shape::Vec(v) => v.iter().find_map(|s| find_mesh(s, within)),
+                egui::Shape::Vec(v) => v.iter().find_map(|s| find_icon(s, within)),
                 _ => None,
             }
         }
-        h.output().shapes.iter().find_map(|cs| find_mesh(&cs.shape, within)).unwrap_or_else(|| panic!("the painted icon"))
+        h.output().shapes.iter().find_map(|cs| find_icon(&cs.shape, within)).unwrap_or_else(|| panic!("the painted icon"))
     }
 
     /// A section header drawn in `dir`: its title box, its chevron box, and the row it sits in.
