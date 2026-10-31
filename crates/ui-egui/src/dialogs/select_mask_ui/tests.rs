@@ -948,3 +948,49 @@ fn rtl_mirrors_the_workspace_chrome() {
         "the flyout points left from the button's left edge: {tri_min}..{tri_max} vs {lasso:?}"
     );
 }
+
+/// The lasso flyout's rows go through the shared popup body + `menu_row`: under RTL the
+/// checked row's label hugs the popup's right edge, under LTR the left edge.
+#[test]
+fn lasso_flyout_rows_mirror_only_under_rtl() {
+    let texts = |dir: crate::direction::Dir| {
+        let _scope = crate::direction::direction_scope(dir);
+        let ctx = egui::Context::default();
+        ctx.all_styles_mut(|s| s.right_to_left = dir == crate::direction::Dir::Rtl);
+        let mut popup = egui::Rect::NOTHING;
+        let mut texts = Vec::new();
+        for _ in 0..3 {
+            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                let btn = ui.button("lasso");
+                let _ = egui::Popup::menu(&btn)
+                    .open_memory(Some(egui::SetOpenCommand::Bool(true)))
+                    .show(|ui| {
+                        crate::menus::popup_body(ui, |ui| {
+                            let l = SmTool::Lasso.tip();
+                            let _ = crate::menu_keys::menu_row(ui, &l, None, true, true);
+                        });
+                    })
+                    .inspect(|r| popup = r.response.rect);
+            });
+            texts = out
+                .shapes
+                .iter()
+                .filter_map(|cs| match &cs.shape {
+                    egui::Shape::Text(ts) => Some((ts.galley.text().to_string(), cs.shape.visual_bounding_rect())),
+                    _ => None,
+                })
+                .collect();
+            out.textures_delta.clear();
+        }
+        (popup, texts)
+    };
+    let (rtl_popup, rtl) = texts(crate::direction::Dir::Rtl);
+    let (ltr_popup, ltr) = texts(crate::direction::Dir::Ltr);
+    assert!(rtl_popup.is_positive() && ltr_popup.is_positive(), "the popups opened");
+    let tip = SmTool::Lasso.tip();
+    let at = |v: &[(String, egui::Rect)]| v.iter().find(|(t, _)| t.contains(&tip)).map(|(_, r)| *r).unwrap_or(egui::Rect::NOTHING);
+    let row = at(&rtl);
+    assert!(rtl_popup.right() - row.right() < 32.0, "rtl: the row label hugs the popup's right edge: {row:?} in {rtl_popup:?}");
+    let row = at(&ltr);
+    assert!(row.left() - ltr_popup.left() < 32.0, "ltr: the row label hugs the popup's left edge: {row:?} in {ltr_popup:?}");
+}

@@ -1897,12 +1897,14 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 let wing = if rtl { vec2(5.0, 0.0) } else { vec2(-5.0, 0.0) };
                 painter.add(egui::Shape::convex_polygon(vec![c, c + wing, c - vec2(0.0, 5.0)], t.icon, Stroke::NONE));
                 r.context_menu(|ui| {
-                    for l in [SmTool::Lasso, SmTool::PolygonalLasso] {
-                        if ui.selectable_label(w.tool == l, l.tip()).clicked() {
-                            w.pick(l);
-                            ui.close();
+                    crate::menus::popup_body(ui, |ui| {
+                        for l in [SmTool::Lasso, SmTool::PolygonalLasso] {
+                            if crate::menu_keys::menu_row(ui, &l.tip(), None, w.tool == l, true).clicked() {
+                                w.pick(l);
+                                ui.close();
+                            }
                         }
-                    }
+                    });
                 });
             }
         }
