@@ -10,15 +10,12 @@ const WINDOW: f32 = 1280.0;
 
 /// The harness pattern of the left-to-right tests: the app over one document.
 fn harness() -> egui_kittest::Harness<'static, PhotocraftApp> {
-    let mut h = egui_kittest::Harness::builder()
-        .with_size(egui::vec2(WINDOW, 800.0))
-        .with_max_steps(64)
-        .build_eframe(|cc| {
-            PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
-            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
-            app.run("file.new", serde_json::json!({"width": 200, "height": 120})).unwrap();
-            app
-        });
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(WINDOW, 800.0)).with_max_steps(64).build_eframe(|cc| {
+        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        app.run("file.new", serde_json::json!({"width": 200, "height": 120})).unwrap();
+        app
+    });
     h.run_steps(6);
     h
 }
@@ -46,27 +43,15 @@ fn rows(dir: crate::text::direction::Dir) -> (egui::Rect, egui::Rect, egui::Rect
 fn rtl_the_rows_read_from_the_right() {
     let (ltr_field, ltr_drop, ltr_frame) = rows(crate::text::direction::Dir::Ltr);
     let (rtl_field, rtl_drop, rtl_frame) = rows(crate::text::direction::Dir::Rtl);
-    assert!(
-        (ltr_field.center().x + rtl_field.center().x - WINDOW).abs() < 2.0,
-        "the Width field mirrors: {ltr_field:?} / {rtl_field:?}"
-    );
-    assert!(
-        (ltr_drop.center().x + rtl_drop.center().x - WINDOW).abs() < 2.0,
-        "the Location dropdown mirrors: {ltr_drop:?} / {rtl_drop:?}"
-    );
+    assert!((ltr_field.center().x + rtl_field.center().x - WINDOW).abs() < 2.0, "the Width field mirrors: {ltr_field:?} / {rtl_field:?}");
+    assert!((ltr_drop.center().x + rtl_drop.center().x - WINDOW).abs() < 2.0, "the Location dropdown mirrors: {ltr_drop:?} / {rtl_drop:?}");
     // The caption column sits between the frame's reading start and its control: the Width
     // field starts one 112 pt caption plus padding in from the frame's left edge in a
     // left-to-right dialog and from its right edge in a mirrored one.
     let ltr_from_start = ltr_field.left() - ltr_frame.left();
     let rtl_from_start = rtl_frame.right() - rtl_field.right();
-    assert!(
-        (120.0..140.0).contains(&ltr_from_start),
-        "the caption column precedes the field from the left: {ltr_from_start} in {ltr_frame:?}"
-    );
-    assert!(
-        (120.0..140.0).contains(&rtl_from_start),
-        "the caption column precedes the field from the right: {rtl_from_start} in {rtl_frame:?}"
-    );
+    assert!((120.0..140.0).contains(&ltr_from_start), "the caption column precedes the field from the left: {ltr_from_start} in {ltr_frame:?}");
+    assert!((120.0..140.0).contains(&rtl_from_start), "the caption column precedes the field from the right: {rtl_from_start} in {rtl_frame:?}");
 }
 
 /// The caption in its fixed column hugs the field it names: the box's right edge in a

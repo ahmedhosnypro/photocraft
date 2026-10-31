@@ -127,6 +127,6 @@ fn body_fields(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
 }
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod rtl_tests;
+#[cfg(test)]
+mod tests;
