@@ -1,6 +1,6 @@
 use super::invoke::invoke;
 use super::items::{ItemCache, MenuItem, menu_items};
-use super::render::{alt_click, render_level, render_level_rows};
+use super::render::{alt_click, render_level, render_level_rows, render_level_with};
 use super::search::help_search;
 use super::{PhotocraftApp, TOP_MENUS, Value, json};
 
@@ -92,8 +92,10 @@ pub fn menu_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> f32 {
                             ui.weak(crate::i18n::tr(lang, "(coming soon)"));
                         }
                         if *top == "Help" {
-                            // The search field scrolls with the rows, as part of the menu's content.
-                            crate::menu_nav::level(ui, 1, &mut nav, |ui, nav| {
+                            // The search field scrolls with the rows, as part of the menu's
+                            // content; the level still goes through `render_level_with` so the
+                            // right-to-left body scope covers it like every other menu.
+                            render_level_with(ui, 1, &mut nav, |ui, nav| {
                                 help_search(ui, items, opening, &mut clicked, nav);
                                 render_level_rows(ui, &mine, 1, &mut clicked, nav);
                             });
