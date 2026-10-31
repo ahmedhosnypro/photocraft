@@ -377,6 +377,20 @@ fn plurals_and_placeholders() {
 }
 
 #[test]
+fn fmt_isolates_a_value_that_reads_against_the_template() {
+    // Arabic template, Latin document name: the name is wrapped in LRI…PDI so it can't scramble.
+    let ar = "هل تريد حفظ التغييرات في “{name}” قبل الإغلاق؟";
+    assert_eq!(fmt(ar, &[("name", "Untitled-4")]), "هل تريد حفظ التغييرات في “\u{2066}Untitled-4\u{2069}” قبل الإغلاق؟");
+    // English template, Latin name: inserted as written (left-to-right output unchanged).
+    assert_eq!(fmt("Save changes to “{name}”?", &[("name", "Untitled-4")]), "Save changes to “Untitled-4”?");
+    // English template, Arabic name: the name is isolated the other way round.
+    assert_eq!(fmt("Save “{name}”?", &[("name", "مستند")]), "Save “\u{2066}مستند\u{2069}”?");
+    // Arabic template, Arabic name, and numbers: same direction or none, no isolates.
+    assert_eq!(fmt("حفظ “{name}”؟", &[("name", "مستند")]), "حفظ “مستند”؟");
+    assert_eq!(fmt("{n} layers", &[("n", "3")]), "3 layers");
+}
+
+#[test]
 fn french_resolves_and_pluralises() {
     let fr = Lang::from_code("fr").expect("fr registered");
     for tag in ["fr", "fr_FR.UTF-8", "fr-CA", "fr_BE", "fr-CH"] {

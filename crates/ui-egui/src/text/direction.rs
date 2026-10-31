@@ -28,7 +28,7 @@
 use std::cell::Cell;
 use std::sync::OnceLock;
 
-use egui::{Align, Layout};
+use egui::{Align, Align2, Layout};
 
 pub use crate::i18n::Dir;
 
@@ -127,6 +127,21 @@ pub fn trailing_min() -> Layout {
     if is_rtl() { Layout::left_to_right(Align::Min) } else { Layout::right_to_left(Align::Min) }
 }
 
+/// The body of an open menu popup. egui pins popup bodies left-to-right (`Popup::menu` and
+/// `SubMenu::show` both lay them out `top_down_justified(Align::Min)` whatever the direction
+/// flag), so in a right-to-left UI every popup body scopes itself through this helper.
+/// The cross align stays `Min`: rows fill the width (justified), and a `Max` align would seed
+/// the scope's `min_rect` at the far edge of the pinned `max_rect`, so the sizing pass would
+/// measure the popup at the full default area width instead of the rows' width. Left-to-right
+/// the popup's own layout is used unchanged.
+pub fn popup_body<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    if is_rtl() {
+        ui.scope_builder(egui::UiBuilder::new().max_rect(ui.max_rect()).layout(Layout::top_down_justified(Align::Min)), add_contents).inner
+    } else {
+        add_contents(ui)
+    }
+}
+
 /// A full-width row in reading order for bodies that stay `top_down(Align::Min)`:
 /// [`horizontal_centered`] without the vertical centring. Rows inside a [`body_layout`] parent
 /// already mirror; opt in here only where that scope does not reach.
@@ -220,6 +235,61 @@ where
         editor(ui);
         ui.add_space(7.0);
     });
+}
+
+/// +1 left-to-right, −1 right-to-left: the signed x-step for hand-painted row geometry (eye
+/// column, thumbnails, indicators), which the egui flag never mirrors.
+pub fn step() -> f32 {
+    if is_rtl() { -1.0 } else { 1.0 }
+}
+
+/// The reading-start x for content offset `off` from a rect's start edge: `rect.left() + off`
+/// left-to-right, `rect.right() - off` right-to-left.
+pub fn start_x(rect: egui::Rect, off: f32) -> f32 {
+    if is_rtl() { rect.right() - off } else { rect.left() + off }
+}
+
+/// The min-x of a `w`-wide element hugging `rect`'s reading-start edge with margin `off` (an eye
+/// icon or thumbnail column built with `Rect::from_min_size`): `rect.left() + off` left-to-right,
+/// `rect.right() - off - w` right-to-left, so the element grows inward from the start edge.
+pub fn start_x_w(rect: egui::Rect, off: f32, w: f32) -> f32 {
+    if is_rtl() { rect.right() - off - w } else { rect.left() + off }
+}
+
+/// The reading-end x for content offset `off` from a rect's end edge: `rect.right() - off`
+/// left-to-right, `rect.left() + off` right-to-left (the scrollbar side of a mirrored row).
+pub fn end_x(rect: egui::Rect, off: f32) -> f32 {
+    if is_rtl() { rect.left() + off } else { rect.right() - off }
+}
+
+/// The x for a `w`-wide painted element placed `off` beyond `rect` in reading order (a label
+/// after a thumbnail): `rect.right() + off` left-to-right, `rect.left() - off - w` right-to-left.
+/// With an alignment anchor instead of a galley, pass `w = 0.0` and [`start_align`].
+pub fn after_x(rect: egui::Rect, off: f32, w: f32) -> f32 {
+    if is_rtl() { rect.left() - off - w } else { rect.right() + off }
+}
+
+/// `Align2` for `Painter::text` hugging the reading-start edge of a row: `LEFT_CENTER`
+/// left-to-right, `RIGHT_CENTER` right-to-left.
+pub fn start_align() -> Align2 {
+    if is_rtl() { Align2::RIGHT_CENTER } else { Align2::LEFT_CENTER }
+}
+
+/// `Align2` for `Painter::text` hugging the reading-end edge of a row (a shortcut hint):
+/// `RIGHT_CENTER` left-to-right, `LEFT_CENTER` right-to-left.
+pub fn end_align() -> Align2 {
+    if is_rtl() { Align2::LEFT_CENTER } else { Align2::RIGHT_CENTER }
+}
+
+/// Is `p` on the reading-start side of the vertical edge `edge` (a mirrored hit test)?
+pub fn start_side(p: f32, edge: f32) -> bool {
+    if is_rtl() { p > edge } else { p < edge }
+}
+
+/// A directional glyph's x mirrored around `cx` in a right-to-left UI (disclosure triangles),
+/// unchanged left-to-right.
+pub fn glyph_x(x: f32, cx: f32) -> f32 {
+    if is_rtl() { 2.0 * cx - x } else { x }
 }
 
 #[cfg(test)]

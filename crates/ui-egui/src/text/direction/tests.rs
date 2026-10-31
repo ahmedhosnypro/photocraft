@@ -177,3 +177,117 @@ fn menus_open_under_the_title_s_reading_start_edge() {
     let undo = h.get_by_label_contains("Undo").rect();
     assert!(undo.right() <= edit.right() + 1.0 && undo.right() > edit.right() - 40.0, "the menu hangs left from Edit's right edge: {undo:?} {edit:?}");
 }
+
+#[test]
+fn hand_painted_x_helpers_mirror_the_edges() {
+    let rect = egui::Rect::from_min_size(egui::pos2(100.0, 40.0), egui::vec2(300.0, 22.0));
+    {
+        let _ltr = direction_scope(Dir::Ltr);
+        assert_eq!(step(), 1.0);
+        assert_eq!(start_x(rect, 6.0), 106.0);
+        assert_eq!(start_x_w(rect, 6.0, 22.0), 106.0);
+        assert_eq!(end_x(rect, 10.0), 390.0);
+    }
+    let _rtl = direction_scope(Dir::Rtl);
+    assert_eq!(step(), -1.0);
+    assert_eq!(start_x(rect, 6.0), 394.0);
+    assert_eq!(start_x_w(rect, 6.0, 22.0), 372.0);
+    assert_eq!(end_x(rect, 10.0), 110.0);
+}
+
+#[test]
+fn hand_painted_x_helpers_mirror_labels_aligns_and_glyphs() {
+    let rect = egui::Rect::from_min_size(egui::pos2(100.0, 40.0), egui::vec2(300.0, 22.0));
+    {
+        let _ltr = direction_scope(Dir::Ltr);
+        assert_eq!(after_x(rect, 10.0, 30.0), 410.0);
+        assert_eq!(start_align(), egui::Align2::LEFT_CENTER);
+        assert_eq!(end_align(), egui::Align2::RIGHT_CENTER);
+        assert!(start_side(105.0, 110.0));
+        assert!(!start_side(115.0, 110.0));
+        assert_eq!(glyph_x(102.0, 106.0), 102.0);
+    }
+    let _rtl = direction_scope(Dir::Rtl);
+    assert_eq!(after_x(rect, 10.0, 30.0), 60.0);
+    assert_eq!(after_x(rect, 10.0, 0.0), 90.0);
+    assert_eq!(start_align(), egui::Align2::RIGHT_CENTER);
+    assert_eq!(end_align(), egui::Align2::LEFT_CENTER);
+    assert!(start_side(115.0, 110.0));
+    assert!(!start_side(105.0, 110.0));
+    assert_eq!(glyph_x(102.0, 106.0), 110.0);
+}
+
+/// `popup_body` re-scopes the body right-to-left under RTL — justified at `Align::Min`, pinned to
+/// the parent `max_rect` — and keeps the popup's own layout left-to-right.
+#[test]
+fn popup_body_mirrors_only_under_rtl() {
+    for (dir, mirrored) in [(Dir::Ltr, false), (Dir::Rtl, true)] {
+        let _dir = direction_scope(dir);
+        let ctx = egui::Context::default();
+        ctx.all_styles_mut(|s| s.right_to_left = dir == Dir::Rtl);
+        let mut inner = None;
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            ui.allocate_ui_with_layout(egui::vec2(300.0, 200.0), Layout::left_to_right(Align::Center), |ui| {
+                popup_body(ui, |ui| {
+                    inner = Some((ui.layout().main_dir(), ui.layout().cross_align(), ui.max_rect().width()));
+                    ui.label("Undo");
+                });
+            });
+        });
+        out.textures_delta.clear();
+        let (main_dir, cross, max_w) = inner.expect("popup_body ran its contents");
+        if mirrored {
+            assert_eq!(main_dir, egui::Direction::TopDown, "{dir:?}");
+            assert_eq!(cross, Align::Min, "{dir:?}: the cross align stays Min (Max ballooned popup width)");
+            assert_eq!(max_w, 300.0, "{dir:?}: the scope is pinned to the parent max_rect");
+        } else {
+            assert_eq!(main_dir, egui::Direction::LeftToRight, "{dir:?}: LTR keeps the popup's own layout");
+        }
+    }
+}
+
+/// The RTL `popup_body` scope must not balloon the body's `min_rect` past the pinned width: the
+/// cross align stays `Min`, so the popup measures the rows' width, not the full area width.
+#[test]
+fn popup_body_rtl_min_rect_stays_inside_the_pinned_width() {
+    for dir in [Dir::Ltr, Dir::Rtl] {
+        let _dir = direction_scope(dir);
+        let ctx = egui::Context::default();
+        ctx.all_styles_mut(|s| s.right_to_left = dir == Dir::Rtl);
+        let mut width = 0.0;
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            ui.allocate_ui_with_layout(egui::vec2(300.0, 200.0), Layout::top_down_justified(Align::Min), |ui| {
+                popup_body(ui, |ui| {
+                    let _ = ui.button("Undo");
+                    let _ = ui.button("Preferences");
+                });
+                width = ui.min_rect().width();
+            });
+        });
+        out.textures_delta.clear();
+        assert!(width <= 300.5, "{dir:?}: popup_body ballooned its min_rect to {width} inside a 300-wide scope");
+    }
+}
+
+/// Left-to-right `popup_body` is a pass-through: wrapping the same contents measures identically
+/// to calling them directly.
+#[test]
+fn popup_body_ltr_matches_a_direct_call() {
+    let _ltr = direction_scope(Dir::Ltr);
+    let ctx = egui::Context::default();
+    let mut widths = [0.0_f32; 2];
+    let mut out = ctx.run_ui(Default::default(), |ui| {
+        ui.allocate_ui_with_layout(egui::vec2(300.0, 200.0), Layout::top_down_justified(Align::Min), |ui| {
+            let _ = ui.button("Undo");
+            widths[0] = ui.min_rect().width();
+        });
+        ui.allocate_ui_with_layout(egui::vec2(300.0, 200.0), Layout::top_down_justified(Align::Min), |ui| {
+            popup_body(ui, |ui| {
+                let _ = ui.button("Undo");
+            });
+            widths[1] = ui.min_rect().width();
+        });
+    });
+    out.textures_delta.clear();
+    assert_eq!(widths[0], widths[1], "LTR: popup_body changed the body's measured width");
+}

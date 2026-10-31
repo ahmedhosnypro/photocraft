@@ -476,12 +476,33 @@ pub fn tr_id<'a>(lang: Lang, id: &str, label: &'a str) -> &'a str {
 }
 
 /// Fill `{name}` placeholders. Unknown placeholders are left as written.
+///
+/// A value whose first strong letter reads against the template's own direction is wrapped in
+/// bidi isolates (U+2066 LRI … U+2069 PDI), so an embedded Latin name can't scramble a
+/// right-to-left sentence (or an Arabic name a left-to-right one). A same-direction value is
+/// inserted as written, keeping left-to-right output byte-identical.
 pub fn fmt(template: &str, args: &[(&str, &str)]) -> String {
+    let template_rtl = strong_rtl(template).unwrap_or(false);
     let mut out = template.to_string();
     for (k, v) in args {
-        out = out.replace(&format!("{{{k}}}"), v);
+        let filled = match strong_rtl(v) {
+            Some(v_rtl) if v_rtl != template_rtl => format!("\u{2066}{v}\u{2069}"),
+            _ => (*v).to_string(),
+        };
+        out = out.replace(&format!("{{{k}}}"), &filled);
     }
     out
+}
+
+/// Whether `text`'s first strong letter (bidi class L vs R/AL) reads right to left; `None` when it
+/// has none (digits, punctuation).
+fn strong_rtl(text: &str) -> Option<bool> {
+    use unicode_bidi::{BidiClass, bidi_class};
+    text.chars().find_map(|c| match bidi_class(c) {
+        BidiClass::L => Some(false),
+        BidiClass::R | BidiClass::AL => Some(true),
+        _ => None,
+    })
 }
 
 /// A plural-aware message: `one`/`other` are the English forms (with `{n}` where the count goes).
