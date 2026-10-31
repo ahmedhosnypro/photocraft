@@ -228,6 +228,11 @@ mod rtl_tests {
                     let r = m.calc_bounds();
                     r.intersects(within).then_some(r)
                 }
+                // SVG icons tessellate into vector paths, not textured rects.
+                egui::Shape::Path(p) => {
+                    let r = p.visual_bounding_rect();
+                    r.intersects(within).then_some(r)
+                }
                 egui::Shape::Vec(v) => v.iter().find_map(|s| find_icon(s, within)),
                 _ => None,
             }
