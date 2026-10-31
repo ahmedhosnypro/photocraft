@@ -396,7 +396,8 @@ fn options_editor(app: &mut PhotocraftApp, ui: &mut egui::Ui, paragraph: bool, s
     let mut name: String = ui.data(|d| d.get_temp(key)).unwrap_or_else(|| s["name"].as_str().unwrap_or("").to_string());
     row(ui, |ui| {
         let name_label = ui.label(RichText::new(tl!("Name")).color(t.text_dim).size(11.5));
-        let r = ui.add_enabled(id != 0, egui::TextEdit::singleline(&mut name).desired_width(170.0)).labelled_by(name_label.id);
+        let mut layouter = crate::widgets::rtl_singleline_layouter(egui::FontId::default());
+        let r = ui.add_enabled(id != 0, crate::widgets::rtl_singleline(&mut name, &mut layouter).desired_width(170.0)).labelled_by(name_label.id);
         if r.lost_focus() && name.trim() != s["name"].as_str().unwrap_or("") && !name.trim().is_empty() {
             let _ = run(app, &format!("{prefix}.rename"), json!({ "id": id, "name": name.trim() }));
             ui.data_mut(|d| d.remove::<String>(key));
@@ -887,10 +888,12 @@ fn spelling_window(app: &mut PhotocraftApp, ctx: &egui::Context) {
                         } else {
                             String::new()
                         };
-                        ui.add_enabled(false, egui::TextEdit::singleline(&mut shown.clone()).desired_width(240.0)).accessible_name(tl!("Not in Dictionary:"));
+                        let mut layouter = crate::widgets::rtl_singleline_layouter(egui::FontId::default());
+                        ui.add_enabled(false, crate::widgets::rtl_singleline(&mut shown.clone(), &mut layouter).desired_width(240.0)).accessible_name(tl!("Not in Dictionary:"));
                         ui.add_space(4.0);
                         let change_label = ui.label(RichText::new(tl!("Change To:")).color(t.text_dim).size(11.5));
-                        ui.add_enabled(item.is_some(), egui::TextEdit::singleline(&mut change_to).desired_width(240.0)).labelled_by(change_label.id);
+                        let mut layouter = crate::widgets::rtl_singleline_layouter(egui::FontId::default());
+                        ui.add_enabled(item.is_some(), crate::widgets::rtl_singleline(&mut change_to, &mut layouter).desired_width(240.0)).labelled_by(change_label.id);
                         ui.add_space(4.0);
                         ui.label(RichText::new(tl!("Suggestions:")).color(t.text_dim).size(11.5));
                         egui::Frame::NONE.fill(t.field).corner_radius(CornerRadius::same(3)).inner_margin(egui::Margin::same(4)).show(ui, |ui| {
