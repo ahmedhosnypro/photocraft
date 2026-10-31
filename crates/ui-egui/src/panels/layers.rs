@@ -62,8 +62,10 @@ fn field_row() -> egui::Layout {
 /// greyed out at Normal, 100% and unlocked, instead of removing them (#8880). Same layout as the
 /// active layer's rows in `layers`.
 fn inactive_blend_rows(ui: &mut egui::Ui, pro: bool) {
-    ui.add_enabled_ui(false, |ui| {
-        ui.allocate_ui_with_layout(egui::vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y), panel_row(), |ui| {
+    // Same structure as the active rows in `layers`: the disabled wrapper sits inside each
+    // allocated row, so it adds no item gap under the rows (#9546).
+    ui.allocate_ui_with_layout(egui::vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y), panel_row(), |ui| {
+        ui.add_enabled_ui(false, |ui| {
             let opacity_label = if pro { tl!("Opacity:") } else { tl!("Opacity") };
             let (blend_width, show_opacity_label) = opacity_row_layout(ui.available_width(), body_text_width(ui, opacity_label), ui.spacing().item_spacing.x);
             let mut m = BlendMode::Normal;
@@ -77,8 +79,10 @@ fn inactive_blend_rows(ui: &mut egui::Ui, pro: bool) {
                 }
             });
         });
-        ui.add_space((theme::ROW_GAP - ui.spacing().item_spacing.y).max(0.0));
-        ui.allocate_ui_with_layout(egui::vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y), panel_row(), |ui| {
+    });
+    ui.add_space((theme::ROW_GAP - ui.spacing().item_spacing.y).max(0.0));
+    ui.allocate_ui_with_layout(egui::vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y), panel_row(), |ui| {
+        ui.add_enabled_ui(false, |ui| {
             let lock_label = if pro { tl!("Lock:") } else { tl!("Lock") };
             let lang = crate::i18n::current();
             let fill_label = if pro { crate::i18n::tr_ctx(lang, "layers", "Fill:") } else { crate::i18n::tr_ctx(lang, "layers", "Fill") };
@@ -110,8 +114,8 @@ fn inactive_blend_rows(ui: &mut egui::Ui, pro: bool) {
                 scrub_pct_label(ui, fill_label, &mut f, ui.available_width());
             });
         });
-        ui.add_space(2.0);
     });
+    ui.add_space(2.0);
 }
 
 pub(super) fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
