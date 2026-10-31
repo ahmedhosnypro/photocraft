@@ -407,7 +407,7 @@ mod rtl_tests {
         for _ in 0..3 {
             let mut clicked = None;
             let mut nav = crate::menu_nav::Nav::default();
-            ctx.run_ui(
+            let mut out = ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 600.0))),
                     ..Default::default()
@@ -423,6 +423,7 @@ mod rtl_tests {
                         });
                 },
             );
+            out.textures_delta.clear();
         }
         egui::AreaState::load(&ctx, popup_id).and_then(|s| s.size).map(|s| s.x).unwrap_or(0.0)
     }
