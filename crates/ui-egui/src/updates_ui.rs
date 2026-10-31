@@ -379,4 +379,60 @@ mod tests {
         let label = rtl.get_by_label("Checking for updates…").rect();
         assert!(spinner.center().x > label.center().x, "RTL: the spinner leads on the right: {spinner:?} vs {label:?}");
     }
+
+    /// The window's blocks hug the reading-start edge: the status label and the Check Again button
+    /// align to the window's right in an RTL UI and to its left in an LTR one.
+    #[test]
+    fn status_blocks_align_to_the_reading_start_edge() {
+        use egui_kittest::{Harness, kittest::Queryable};
+
+        fn harness(dir: crate::direction::Dir) -> Harness<'static, PhotocraftApp> {
+            let _dir = crate::direction::direction_scope(dir);
+            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Services::default());
+            app.ui.updates_open = true;
+            app.session.updates.status = Status::UpToDate;
+            let mut h = Harness::builder().with_size(egui::vec2(600.0, 400.0)).build_ui_state(|ui, app: &mut PhotocraftApp| show(app, ui.ctx()), app);
+            PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ProMedium);
+            h.run_steps(4);
+            h
+        }
+        let win_id = egui::Id::unique("photocraft_updates");
+
+        let ltr = harness(crate::direction::Dir::Ltr);
+        let win = ltr.ctx.memory(|m| m.area_rect(win_id)).expect("the updates window");
+        let label = ltr.get_by_label("PhotoCraft is up to date.").rect();
+        let again = ltr.get_by_label("Check Again").rect();
+        assert!(label.left() - win.left() < 40.0, "LTR: the status label hugs the left: {label:?} in {win:?}");
+        assert!(again.left() - win.left() < 40.0, "LTR: the Check Again button hugs the left: {again:?} in {win:?}");
+
+        let rtl = harness(crate::direction::Dir::Rtl);
+        let win = rtl.ctx.memory(|m| m.area_rect(win_id)).expect("the updates window");
+        let label = rtl.get_by_label("PhotoCraft is up to date.").rect();
+        let again = rtl.get_by_label("Check Again").rect();
+        assert!(win.right() - label.right() < 40.0, "RTL: the status label hugs the right: {label:?} in {win:?}");
+        assert!(win.right() - again.right() < 40.0, "RTL: the Check Again button hugs the right: {again:?} in {win:?}");
+    }
+
+    /// Every string the updates window shows has an Arabic row: a missing key would fall back to
+    /// English in the mirrored UI.
+    #[test]
+    fn arabic_translates_the_update_window_strings() {
+        let ar = crate::i18n::Lang::from_code("ar").expect("ar registered");
+        for key in [
+            "PhotoCraft Updates",
+            "Installed version: {version}",
+            "Checking for updates…",
+            "PhotoCraft {version} is available.",
+            "Update and Restart",
+            "Release Notes",
+            "Open Download Page",
+            "PhotoCraft is up to date.",
+            "Could not check for updates.",
+            "Updates have not been checked yet.",
+            "Check Again",
+        ] {
+            assert!(crate::i18n::has(ar, key), "ar is missing {key:?}");
+            assert_ne!(crate::i18n::tr(ar, key), key, "ar falls back to English for {key:?}");
+        }
+    }
 }
