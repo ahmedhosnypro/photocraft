@@ -15,7 +15,7 @@ pub fn menu_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> f32 {
     let built: std::cell::OnceCell<ItemCache> = std::cell::OnceCell::new();
     let app_ref: &PhotocraftApp = app;
     let rtl = crate::direction::is_rtl();
-    let mut edge = if rtl { ui.cursor().right() } else { ui.cursor().left() };
+    let mut edge = crate::direction::start_edge(ui.cursor());
     let lang = crate::i18n::current();
     let mut clicked: Option<String> = None;
     let t = crate::theme::Tokens::get(ui.ctx());
@@ -107,7 +107,7 @@ pub fn menu_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> f32 {
                     });
                 buttons.push(title);
             }
-            edge = if rtl { buttons.iter().map(|b| b.rect.left()).fold(edge, f32::min) } else { buttons.iter().map(|b| b.rect.right()).fold(edge, f32::max) };
+            edge = crate::direction::row_end_edge(buttons.iter().map(|b| b.rect), edge);
             switch_on_hover(ui.ctx(), &buttons);
             // The keys' lists stay in logical menu order (File first): the arrows step to the
             // menu on the side they point at, which `horizontal_nav_keys` swaps in a

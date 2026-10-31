@@ -77,7 +77,7 @@ pub(super) fn render_level_rows(ui: &mut egui::Ui, items: &[&MenuItem], depth: u
             // reading start; the key shows only while the mnemonics do.
             let text =
                 crate::menu_keys::menu_row_text(ui, it.checked == Some(true), &label, mnemonic, nav.underline, crate::menu_keys::GutterSide::ReadingStart);
-            let mut b = leaf_row_button(text, &it.shortcut, rtl);
+            let mut b = crate::menu_keys::menu_row_button(text, it.shortcut.clone(), rtl);
             if let Some(tint) = it.color.as_deref().and_then(menu_tint) {
                 b = b.fill(tint.gamma_multiply(0.55));
             }
@@ -110,7 +110,7 @@ pub(super) fn render_level_rows(ui: &mut egui::Ui, items: &[&MenuItem], depth: u
             let title = crate::menu_keys::menu_row_text(ui, false, &shown, mnemonic, nav.underline, crate::menu_keys::GutterSide::ReadingStart);
             ui.add_enabled_ui(enabled, |ui| {
                 nav.row(ui, depth - 1, enabled, None, mnemonic, |ui, nav| {
-                    let (response, inner) = submenu_row(ui, title, |ui| render_level(ui, &child, depth + 1, clicked, nav));
+                    let (response, inner) = crate::menu_keys::submenu_row(ui, title, |ui| render_level(ui, &child, depth + 1, clicked, nav));
                     if inner.is_some() {
                         // Where the submenu hangs from, to keep it below the menu bar (#319).
                         nav.set_anchor(depth, response.rect);
@@ -121,57 +121,6 @@ pub(super) fn render_level_rows(ui: &mut egui::Ui, items: &[&MenuItem], depth: u
             last_was_sep = false;
         }
     }
-}
-
-/// A leaf row's button. The button's atoms run left-to-right whatever the direction, so in a
-/// right-to-left row a shortcut already lands at the left via [`egui::Button::left_text`]; a row
-/// without one would leave its label at the left edge, so it gets a single leading grow to keep
-/// the label at the row's reading start (the right).
-fn leaf_row_button<'a>(text: egui::WidgetText, shortcut: &Option<String>, rtl: bool) -> egui::Button<'a> {
-    if rtl && shortcut.is_none() {
-        // The grow goes in as the first atom: `left_text` would add its own grow first.
-        egui::Button::new((egui::Atom::grow(), text))
-    } else {
-        crate::menu_keys::menu_row_button(text, shortcut.clone(), rtl)
-    }
-}
-
-/// A submenu row's button: the arrow at the row's reading end, where the submenu opens (the
-/// glyph itself rotates with the direction flag in the fork's `arrow_atom`). If this row ever
-/// delegates to `SubMenuButton::ui` (which applies the chrome direction itself), drop the branch.
-fn submenu_arrow_button<'a>(title: egui::WidgetText, rtl: bool) -> egui::Button<'a> {
-    let button = egui::Button::new(title);
-    if rtl {
-        button.left_text(egui::containers::menu::SubMenuButton::arrow_atom(None))
-    } else {
-        button.right_text(egui::containers::menu::SubMenuButton::arrow_atom(None))
-    }
-}
-
-/// A submenu row, drawn as `ui.menu_button` draws it, except that a row scrolled out of view
-/// doesn't open its submenu. egui opens a submenu whenever the pointer is over its row, clipped
-/// or not: a menu reopened scrolled down (after Edit › Preferences or Window › Theme) has rows
-/// hidden above its view, over the menu bar, and the hidden one under the title opened on the
-/// press; the release on the title then counted as a click outside that submenu and closed the
-/// whole menu (#5896, #6225). An open submenu (e.g. opened from the keyboard) is drawn as usual.
-fn submenu_row<R>(ui: &mut egui::Ui, title: egui::WidgetText, content: impl FnOnce(&mut egui::Ui) -> R) -> (egui::Response, Option<R>) {
-    use egui::containers::menu::{MenuState, SubMenu};
-    let sub = SubMenu::id_from_widget_id(ui.next_auto_id());
-    let open = MenuState::from_ui(ui, |state, _| state.open_item == Some(sub));
-    let inactive = ui.style().visuals.widgets.inactive;
-    if open {
-        ui.style_mut().visuals.widgets.inactive = ui.style().visuals.widgets.open;
-    }
-    let response = ui.add(submenu_arrow_button(title, ui.style().right_to_left));
-    ui.style_mut().visuals.widgets.inactive = inactive;
-    // The rect egui tests the pointer against (`SubMenu::show`), against the part that can be seen.
-    let reach = response.rect.expand2(ui.spacing().item_spacing / 2.0);
-    let hidden = ui.ctx().pointer_hover_pos().is_some_and(|p| reach.contains(p) && !ui.clip_rect().contains(p));
-    if hidden && !open {
-        return (response, None);
-    }
-    let inner = SubMenu::new().show(ui, &response, |ui| popup_body(ui, content));
-    (response, inner.map(|r| r.inner))
 }
 
 /// A submenu header is enabled only while some item under it (at any depth) can run, so a
@@ -284,17 +233,17 @@ mod rtl_tests {
     /// the shortcut or submenu arrow first, at the left. Left-to-right rows are unchanged.
     #[test]
     fn rtl_row_atoms_run_in_reading_order() {
-        let b = leaf_row_button("Undo".into(), &Some("Ctrl+Z".to_string()), true);
+        let b = crate::menu_keys::menu_row_button("Undo".into(), Some("Ctrl+Z".to_string()), true);
         assert_eq!(atom_kinds(&b), ["text:Ctrl+Z", "grow", "text:Undo"]);
-        let b = leaf_row_button("Preferences".into(), &None, true);
+        let b = crate::menu_keys::menu_row_button("Preferences".into(), None, true);
         assert_eq!(atom_kinds(&b), ["grow", "text:Preferences"]);
-        let b = submenu_arrow_button("Sub".into(), true);
+        let b = crate::menu_keys::submenu_row_button("Sub".into(), true);
         assert_eq!(atom_kinds(&b), ["other", "grow", "text:Sub"]);
-        let b = leaf_row_button("Undo".into(), &Some("Ctrl+Z".to_string()), false);
+        let b = crate::menu_keys::menu_row_button("Undo".into(), Some("Ctrl+Z".to_string()), false);
         assert_eq!(atom_kinds(&b), ["text:Undo", "grow", "text:Ctrl+Z"]);
-        let b = leaf_row_button("Preferences".into(), &None, false);
+        let b = crate::menu_keys::menu_row_button("Preferences".into(), None, false);
         assert_eq!(atom_kinds(&b), ["text:Preferences"]);
-        let b = submenu_arrow_button("Sub".into(), false);
+        let b = crate::menu_keys::submenu_row_button("Sub".into(), false);
         assert_eq!(atom_kinds(&b), ["text:Sub", "grow", "other"]);
     }
 
