@@ -371,22 +371,13 @@ fn width_row_mirrors_in_rtl() {
         PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
         open(h.state_mut(), "image.imageSize").unwrap();
         h.run_steps(3);
-        let width = h
-            .query_all_by_role(Role::SpinButton)
-            .find(|n| n.accesskit_node().label().as_deref() == Some("Width"))
-            .expect("the Width field")
-            .rect();
-        let units: Vec<egui::Rect> = h
-            .query_all_by_role(Role::ComboBox)
-            .filter(|n| n.accesskit_node().label().as_deref() == Some("Units"))
-            .map(|n| n.rect())
-            .collect();
+        let width = h.query_all_by_role(Role::SpinButton).find(|n| n.accesskit_node().label().as_deref() == Some("Width")).expect("the Width field").rect();
+        let units: Vec<egui::Rect> =
+            h.query_all_by_role(Role::ComboBox).filter(|n| n.accesskit_node().label().as_deref() == Some("Units")).map(|n| n.rect()).collect();
         assert!(!units.is_empty(), "the row's Units list is missing");
         let units = units
             .into_iter()
-            .min_by(|a, b| {
-                (a.center().y - width.center().y).abs().total_cmp(&(b.center().y - width.center().y).abs())
-            })
+            .min_by(|a, b| (a.center().y - width.center().y).abs().total_cmp(&(b.center().y - width.center().y).abs()))
             .expect("the Units list");
         if rtl {
             assert!(units.left() < width.left(), "RTL: the Units list sits left of the Width field: {units:?} {width:?}");
