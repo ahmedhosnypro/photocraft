@@ -391,7 +391,13 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                         ] {
                             let on = crate::view_cmds::checked(app, id).unwrap_or(false);
                             let enabled = crate::view_cmds::is_enabled(app, id).unwrap_or(true);
-                            if ui.add_enabled(enabled, egui::Button::selectable(on, label)).clicked() {
+                            // Plain Button packs its atoms LTR whatever the direction flag; the
+                            // menu-row atom pins the label to the row's reading start under RTL.
+                            let row = crate::menus::menu_keys::menu_row_button_atom(label.into(), None, ui.style().right_to_left)
+                                .selected(on)
+                                .frame_when_inactive(on)
+                                .frame(true);
+                            if ui.add_enabled(enabled, row).clicked() {
                                 let _ = crate::menus::invoke(app, &ctx, id, json!({}));
                                 ui.close();
                             }
