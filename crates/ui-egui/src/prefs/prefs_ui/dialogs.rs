@@ -194,7 +194,10 @@ pub fn open_mismatch(app: &mut PhotocraftApp, message: &str, action: &str, missi
 pub(super) fn toolbar_tab(ui: &mut egui::Ui, f: &mut Map<String, Value>) {
     let mut hidden: Vec<String> = f.get("toolbarHidden").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
     egui::ScrollArea::vertical().max_height(380.0).id_salt("toolbar-scroll").show(ui, |ui| {
-        egui::Grid::new("toolbar-grid").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
+        // The fork's grid cannot place its cells under a right-to-left cursor, so the table
+        // runs in an explicit left-to-right scope; the cells are emitted in reading order below.
+        let mut grid_ui = ui.new_child(egui::UiBuilder::new().max_rect(ui.max_rect()).layout(egui::Layout::top_down(egui::Align::Min)));
+        egui::Grid::new("toolbar-grid").num_columns(2).spacing([16.0, 4.0]).show(&mut grid_ui, |ui| {
             for tool in crate::state::Tool::ALL {
                 let name = format!("{tool:?}");
                 let mut on = !hidden.contains(&name);
