@@ -319,12 +319,10 @@ mod tests {
     fn message(dir: crate::direction::Dir) -> (egui::Rect, egui::Rect) {
         let _scope = crate::direction::direction_scope(dir);
         let area = std::cell::Cell::new(egui::Rect::ZERO);
-        let mut h = egui_kittest::Harness::builder()
-            .with_size(egui::vec2(400.0, 200.0))
-            .build_ui(|ui| {
-                area.set(ui.max_rect());
-                body(ui);
-            });
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(400.0, 200.0)).build_ui(|ui| {
+            area.set(ui.max_rect());
+            body(ui);
+        });
         h.run();
         (h.get_by_label("Reset all tools to their default settings?").rect(), area.get())
     }
@@ -335,13 +333,7 @@ mod tests {
     fn the_confirmation_reads_from_the_reading_start() {
         let (ltr, ltr_area) = message(crate::direction::Dir::Ltr);
         let (rtl, rtl_area) = message(crate::direction::Dir::Rtl);
-        assert!(
-            (ltr.left() - ltr_area.left()).abs() < 1.0,
-            "left-to-right: the message starts at the left edge: {ltr:?} in {ltr_area:?}"
-        );
-        assert!(
-            (rtl.right() - rtl_area.right()).abs() < 1.0,
-            "right-to-left: the message ends at the right edge: {rtl:?} in {rtl_area:?}"
-        );
+        assert!((ltr.left() - ltr_area.left()).abs() < 1.0, "left-to-right: the message starts at the left edge: {ltr:?} in {ltr_area:?}");
+        assert!((rtl.right() - rtl_area.right()).abs() < 1.0, "right-to-left: the message ends at the right edge: {rtl:?} in {rtl_area:?}");
     }
 }
