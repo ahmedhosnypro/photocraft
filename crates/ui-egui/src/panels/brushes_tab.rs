@@ -965,8 +965,9 @@ fn rename_bar(ui: &mut egui::Ui, st: &mut BrushesPanelState, acts: &mut Vec<Acti
     let mut done = false;
     ui.horizontal(|ui| {
         let name_label = ui.label(RichText::new(if r.group { tl!("Group name") } else { tl!("Brush name") }).color(t.text_dim));
+        let mut layouter = widgets::rtl_singleline_layouter(egui::FontId::default());
         let resp = ui
-            .add(egui::TextEdit::singleline(&mut r.text).desired_width((ui.available_width() - 140.0).max(60.0)).id_salt("brush-rename"))
+            .add(widgets::rtl_singleline(&mut r.text, &mut layouter).desired_width((ui.available_width() - 140.0).max(60.0)).id_salt("brush-rename"))
             .labelled_by(name_label.id);
         if !resp.has_focus() && !resp.lost_focus() {
             resp.request_focus();
