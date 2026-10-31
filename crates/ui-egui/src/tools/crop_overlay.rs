@@ -285,7 +285,7 @@ pub fn keys(app: &mut PhotocraftApp, ctx: &egui::Context) -> bool {
 pub fn options_button(o: &mut ToolOptions, ui: &mut egui::Ui) {
     let r =
         crate::icons::button(ui, "grid-3x3", 24.0, false, &format!("{}  ({})", tl!("Set the overlay options for the Crop tool"), tl!(o.crop_overlay.label())));
-    egui::Popup::menu(&r).show(|ui| {
+    egui::Popup::menu(&r).show(|ui| crate::menus::popup_body(ui, |ui| {
         ui.set_min_width(220.0);
         let item = |ui: &mut egui::Ui, on: bool, label: &str, key: Option<&str>| ui.add(overlay_row(ui, on, label, key)).clicked();
         for k in CropOverlay::ALL {
@@ -312,7 +312,7 @@ pub fn options_button(o: &mut ToolOptions, ui: &mut egui::Ui) {
             cycle_orientation(o);
             ui.close();
         }
-    });
+    }));
 }
 
 /// One row of the overlay menu: the menu bar's row shape — the checkmark column at the reading
