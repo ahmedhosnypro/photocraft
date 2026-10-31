@@ -469,16 +469,21 @@ fn web_size(ui: &mut egui::Ui, f: &mut Map<String, Value>, doc: &photocraft_doc:
         f.insert("height".into(), json!(height));
     };
     let max = MAX_PX as f32;
-    let (width, height, percent) = egui::Grid::new("web-size")
-        .num_columns(2)
-        .show(ui, |ui| {
-            (
-                size_field(ui, tl!("Width"), w, 1.0..=max, "px", 0),
-                size_field(ui, tl!("Height"), h, 1.0..=max, "px", 0),
-                size_field(ui, tl!("Percent"), pct, 1.0..=1000.0, "%", 2),
-            )
-        })
-        .inner;
+    // The fork's `Grid` cannot start under a right-to-left cursor; the size rows stay LTR and
+    // their cells keep their order in either direction.
+    let (width, height, percent) = crate::direction::ltr_vertical(ui, |ui| {
+        egui::Grid::new("web-size")
+            .num_columns(2)
+            .show(ui, |ui| {
+                (
+                    size_field(ui, tl!("Width"), w, 1.0..=max, "px", 0),
+                    size_field(ui, tl!("Height"), h, 1.0..=max, "px", 0),
+                    size_field(ui, tl!("Percent"), pct, 1.0..=1000.0, "%", 2),
+                )
+            })
+            .inner
+    })
+    .inner;
     let side = match (width, height) {
         (Some(v), _) => resize_from_side(w0, h0, v.round(), h, lock, true).ok(),
         (_, Some(v)) => resize_from_side(w0, h0, w, v.round(), lock, false).ok(),
@@ -601,7 +606,10 @@ pub(super) fn download_for_web(app: &mut PhotocraftApp, mut p: Value) -> Result<
 mod rtl_tests {
     use super::*;
     use egui::accesskit::Role;
-    use egui_kittest::{Harness, kittest::{NodeT, Queryable}};
+    use egui_kittest::{
+        Harness,
+        kittest::{NodeT, Queryable},
+    };
 
     /// A document to draw the Save for Web body over.
     fn app() -> PhotocraftApp {
