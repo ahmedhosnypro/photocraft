@@ -205,6 +205,7 @@ mod rtl_tests {
     use crate::direction::Dir;
     use egui_kittest::kittest::Queryable;
 
+    #[allow(clippy::type_complexity)]
     type FillHarness = egui_kittest::Harness<'static, (PhotocraftApp, Map<String, Value>, egui::Rect)>;
 
     /// The Pattern Fill body drawn in `dir`, with the column it draws in.
