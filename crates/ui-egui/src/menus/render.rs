@@ -200,17 +200,36 @@ mod disabled_rtl_tests {
 
     fn level_items() -> Vec<MenuItem> {
         vec![
-            MenuItem { id: "edit.undo".into(), label: "Undo".into(), path: vec!["Edit".into()], shortcut: Some("Ctrl+Z".into()), enabled: true, checked: None, color: None },
+            MenuItem {
+                id: "edit.undo".into(),
+                label: "Undo".into(),
+                path: vec!["Edit".into()],
+                shortcut: Some("Ctrl+Z".into()),
+                enabled: true,
+                checked: None,
+                color: None,
+            },
             // Greyed with no shortcut, like the welcome screen's Edit items: a single text atom.
-            MenuItem { id: "edit.spellCheck".into(), label: "Spell Check".into(), path: vec!["Edit".into()], shortcut: None, enabled: false, checked: None, color: None },
+            MenuItem {
+                id: "edit.spellCheck".into(),
+                label: "Spell Check".into(),
+                path: vec!["Edit".into()],
+                shortcut: None,
+                enabled: false,
+                checked: None,
+                color: None,
+            },
         ]
     }
 
     fn galley_rect(out: &egui::FullOutput, contains: &str) -> Option<egui::Rect> {
-        out.shapes.iter().filter_map(|s| match &s.shape {
-            egui::Shape::Text(t) if t.galley.job.text.contains(contains) => Some(t.galley.rect.translate(t.pos.to_vec2())),
-            _ => None,
-        }).next()
+        out.shapes
+            .iter()
+            .filter_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text.contains(contains) => Some(t.galley.rect.translate(t.pos.to_vec2())),
+                _ => None,
+            })
+            .next()
     }
 
     /// A greyed row without a shortcut still hugs the reading-start edge of its row: the right
@@ -255,11 +274,14 @@ mod rtl_tests {
     use egui::AtomKind;
 
     fn atom_kinds(b: &egui::Button<'_>) -> Vec<String> {
-        b.atoms().iter().map(|a| match &a.kind {
-            AtomKind::Text(t) => format!("text:{}", t.text()),
-            _ if a.grow => "grow".to_string(),
-            _ => "other".to_string(),
-        }).collect()
+        b.atoms()
+            .iter()
+            .map(|a| match &a.kind {
+                AtomKind::Text(t) => format!("text:{}", t.text()),
+                _ if a.grow => "grow".to_string(),
+                _ => "other".to_string(),
+            })
+            .collect()
     }
 
     /// Right-to-left rows run in reading order — the label last, so it lands at the row's right,
@@ -312,10 +334,14 @@ mod rtl_tests {
                 render_level_rows(ui, &refs, 1, &mut clicked, &mut nav);
             });
         });
-        let texts: Vec<(String, egui::Rect)> = out.shapes.iter().filter_map(|cs| match &cs.shape {
-            egui::Shape::Text(ts) => Some((ts.galley.text().to_string(), cs.shape.visual_bounding_rect())),
-            _ => None,
-        }).collect();
+        let texts: Vec<(String, egui::Rect)> = out
+            .shapes
+            .iter()
+            .filter_map(|cs| match &cs.shape {
+                egui::Shape::Text(ts) => Some((ts.galley.text().to_string(), cs.shape.visual_bounding_rect())),
+                _ => None,
+            })
+            .collect();
         out.textures_delta.clear();
         texts
     }
@@ -357,10 +383,14 @@ mod rtl_tests {
                 width = ui.min_rect().width();
             });
         });
-        let texts = out.shapes.iter().filter_map(|cs| match &cs.shape {
-            egui::Shape::Text(ts) => Some((ts.galley.text().to_string(), cs.shape.visual_bounding_rect())),
-            _ => None,
-        }).collect();
+        let texts = out
+            .shapes
+            .iter()
+            .filter_map(|cs| match &cs.shape {
+                egui::Shape::Text(ts) => Some((ts.galley.text().to_string(), cs.shape.visual_bounding_rect())),
+                _ => None,
+            })
+            .collect();
         out.textures_delta.clear();
         (texts, width)
     }
