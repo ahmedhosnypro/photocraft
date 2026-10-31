@@ -423,6 +423,9 @@ mod tests {
     #[test]
     fn effect_label_hangs_from_the_reading_start() {
         let ctx = egui::Context::default();
+        // egui creates its Fonts on the first full pass; the painters below layout text.
+        let out = ctx.run(egui::RawInput::default(), |_| {});
+        out.textures_delta.clear();
         let r = row();
         let indent = 30.0 + 34.0;
         let off = 24.0;
