@@ -395,6 +395,47 @@ mod rtl_tests {
         (texts, width)
     }
 
+    /// Render one level through the same `Popup::menu` path the menu bar uses, run the sizing
+    /// pass plus two steady frames, and return the popup area's stored width.
+    fn popup_level_width(dir: crate::direction::Dir) -> f32 {
+        let _scope = crate::direction::direction_scope(dir);
+        let ctx = egui::Context::default();
+        ctx.all_styles_mut(|s| s.right_to_left = dir == crate::direction::Dir::Rtl);
+        let items = menu_items();
+        let refs: Vec<&MenuItem> = items.iter().collect();
+        let mut popup_id = egui::Id::NULL;
+        for _ in 0..3 {
+            let mut clicked = None;
+            let mut nav = crate::menu_nav::Nav::default();
+            ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 600.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    let btn = ui.button("Layer");
+                    popup_id = egui::Popup::default_response_id(&btn);
+                    egui::Popup::menu(&btn)
+                        .open_memory(Some(egui::SetOpenCommand::Bool(true)))
+                        .show(|ui| {
+                            ui.set_min_width(220.0);
+                            render_level(ui, &refs, 1, &mut clicked, &mut nav);
+                        });
+                },
+            );
+        }
+        egui::AreaState::load(&ctx, popup_id).and_then(|s| s.size).map(|s| s.x).unwrap_or(0.0)
+    }
+
+    /// A menu popup measures the same width in both directions: the right-to-left level scope
+    /// must not inflate the popup's measured width past the left-to-right one (#w7).
+    #[test]
+    fn menu_popup_width_matches_in_rtl_and_ltr() {
+        let ltr = popup_level_width(crate::direction::Dir::Ltr);
+        let rtl = popup_level_width(crate::direction::Dir::Rtl);
+        assert!((ltr - rtl).abs() < 1.0, "popup width differs: ltr {ltr}, rtl {rtl}");
+    }
+
     /// The RTL `render_level` scope (justified `Align::Max` child pinned to the popup's
     /// `max_rect`) must not balloon its `min_rect` past the popup width, and the rows must still
     /// paint. Left-to-right, `render_level` stays the direct `menu_nav::level` call — the scope
