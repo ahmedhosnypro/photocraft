@@ -205,8 +205,10 @@ mod rtl_tests {
     use crate::direction::Dir;
     use egui_kittest::kittest::Queryable;
 
+    type FillHarness = egui_kittest::Harness<'static, (PhotocraftApp, Map<String, Value>, egui::Rect)>;
+
     /// The Pattern Fill body drawn in `dir`, with the column it draws in.
-    fn harness(dir: Dir) -> (egui_kittest::Harness<'static, (PhotocraftApp, Map<String, Value>, egui::Rect)>, egui::Rect) {
+    fn harness(dir: Dir) -> (FillHarness, egui::Rect) {
         let _dir = crate::direction::direction_scope(dir);
         let mut fields = Map::new();
         fields.insert("pattern".into(), json!(""));
