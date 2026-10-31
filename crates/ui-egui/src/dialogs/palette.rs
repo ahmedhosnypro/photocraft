@@ -495,10 +495,7 @@ mod tests {
         assert_eq!(rtl.len(), ltr.len(), "the palette paints the same hit list in RTL");
         for (i, ((l_label, l_detail), (r_label, r_detail))) in ltr.iter().zip(&rtl).enumerate() {
             assert!((l_label.center().y - r_label.center().y).abs() < 0.5, "row {i} keeps its place in both directions");
-            assert!(
-                (l_label.center().y - l_detail.center().y).abs() < 1.0,
-                "row {i}'s label and detail share the row: label={l_label:?} detail={l_detail:?}"
-            );
+            assert!((l_label.center().y - l_detail.center().y).abs() < 1.0, "row {i}'s label and detail share the row: label={l_label:?} detail={l_detail:?}");
             assert!(l_label.right() < l_detail.left(), "LTR: row {i}'s label sits left of its detail");
             assert!(r_label.left() > r_detail.right(), "RTL: row {i}'s label sits right of its detail");
         }
@@ -529,5 +526,4 @@ mod tests {
         assert!(rtl.intersects(ctx.content_rect()), "the RTL palette stays on screen");
         assert_eq!(rtl, ltr, "the palette keeps its place in both directions");
     }
-
 }
