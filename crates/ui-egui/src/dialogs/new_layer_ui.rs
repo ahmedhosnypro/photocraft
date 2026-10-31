@@ -82,15 +82,9 @@ fn add_rtl_singleline(ui: &mut egui::Ui, text: &mut String, configure: impl FnOn
     if !crate::direction::is_rtl() {
         return ui.add(edit);
     }
-    let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, _wrap: f32| {
-        let font = egui::TextStyle::Body.resolve(ui.style());
-        let mut job = egui::text::LayoutJob::simple_singleline(buf.as_str().to_owned(), font, ui.visuals().text_color());
-        job.direction = egui::epaint::text::TextDirection::RightToLeft;
-        job.halign = egui::Align::Max;
-        job.keep_trailing_whitespace = true;
-        ui.fonts_mut(|f| f.layout_job(job))
-    };
-    ui.add(edit.align(egui::Align2::RIGHT_CENTER).layouter(&mut layouter))
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let mut layouter = crate::widgets::rtl_singleline_layouter(font);
+    ui.add(configure(crate::widgets::rtl_singleline(text, &mut layouter)))
 }
 
 /// The dialog's fields.
