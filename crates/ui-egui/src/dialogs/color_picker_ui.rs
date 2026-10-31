@@ -916,6 +916,8 @@ mod rtl_tests {
     fn rtl_picker_mirrors_the_action_stack_and_swatch_pair() {
         let (lf, lok, lcancel, lcur) = picker_frame(crate::direction::Dir::Ltr);
         let (rf, rok, rcancel, rcur) = picker_frame(crate::direction::Dir::Rtl);
+        eprintln!("DBG LTR frame={lf:?} ok={lok:?} cancel={lcancel:?} cur={lcur:?}");
+        eprintln!("DBG RTL frame={rf:?} ok={rok:?} cancel={rcancel:?} cur={rcur:?}");
         assert!((rf.width() - lf.width()).abs() < 1.0, "the frame keeps its width: {rf:?} vs {lf:?}");
         assert!((lok.left() - lcancel.left()).abs() < 1.0 && (rok.left() - rcancel.left()).abs() < 1.0, "a flush stack in both directions: {lok:?} {rok:?}");
         assert!(
