@@ -159,6 +159,21 @@ pub fn window_body<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -
     }
 }
 
+/// A label inside a mirrored body ([`body_layout`]/[`window_body`]): in a right-to-left UI the
+/// paragraph base direction is pinned right-to-left and the galley aligns to the reading-start
+/// (right) edge, so mixed Arabic/Latin lines keep their phrase order instead of scrambling and
+/// hug the right margin. In a left-to-right UI this is egui's plain label, unchanged.
+pub fn body_label(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) -> egui::Response {
+    let text = text.into();
+    if !is_rtl() {
+        return ui.label(text);
+    }
+    let mut job = std::sync::Arc::unwrap_or_clone(text.into_layout_job(ui.style(), egui::FontSelection::Default, ui.text_valign()));
+    job.direction = egui::epaint::text::TextDirection::RightToLeft;
+    job.halign = Align::Max;
+    ui.label(egui::WidgetText::LayoutJob(std::sync::Arc::new(job)))
+}
+
 /// Run a block inside a left-to-right scope even in a right-to-left UI. `egui::Grid` places its
 /// first cell at the raw cursor, which is `x = -inf` at the start of a right-to-left row, so a
 /// grid must never sit directly in an RTL row; wrap it in this and mirror the cell order with
