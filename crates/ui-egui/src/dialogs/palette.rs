@@ -117,6 +117,34 @@ fn menu_hits(menus: Vec<crate::menus::MenuItem>, q: &str, lang: crate::i18n::Lan
         .collect()
 }
 
+/// The palette's search field: in a right-to-left UI the hint and the typed text read from the
+/// right (right-aligned galley on a right-to-left paragraph base); LTR keeps egui's default
+/// left-aligned, auto-direction edit, unchanged.
+fn search_edit(ui: &mut egui::Ui, q: &mut String, width: f32) -> egui::Response {
+    let font = egui::FontId::proportional(15.0);
+    let mut edit = egui::TextEdit::singleline(q)
+        .hint_text(tl!("Search commands, tools and panels…"))
+        .frame(egui::Frame::NONE)
+        .font(font.clone())
+        .desired_width(width - 40.0);
+    if !crate::direction::is_rtl() {
+        return ui.add(edit);
+    }
+    // The hint is laid out from its own job, not the layouter below, so pin its paragraph base
+    // direction too; the hint color is the style's weak text color, as for a plain-string hint.
+    let mut hint_job = egui::text::LayoutJob::simple_singleline(tl!("Search commands, tools and panels…").to_owned(), font.clone(), ui.visuals().weak_text_color());
+    hint_job.direction = egui::epaint::text::TextDirection::RightToLeft;
+    edit = edit.hint_text(egui::WidgetText::from(hint_job));
+    let mut layouter = move |ui: &egui::Ui, text: &dyn egui::TextBuffer, _wrap_width: f32| {
+        let mut job = egui::text::LayoutJob::simple_singleline(text.as_str().to_owned(), font.clone(), ui.visuals().text_color());
+        job.direction = egui::epaint::text::TextDirection::RightToLeft;
+        job.halign = egui::Align::Max;
+        job.keep_trailing_whitespace = true;
+        ui.fonts_mut(|f| f.layout_job(job))
+    };
+    ui.add(edit.align(Align2::RIGHT_CENTER).layouter(&mut layouter))
+}
+
 pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
     if !app.ui.palette_open {
         return;
@@ -154,12 +182,7 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                     ui.allocate_ui_with_layout(row_size, crate::direction::row(), |ui| {
                         let (r, _) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::hover());
                         icons::paint(ui, r, "search", 16.0, t.text_dim);
-                        let te = egui::TextEdit::singleline(&mut q)
-                            .hint_text(tl!("Search commands, tools and panels…"))
-                            .frame(egui::Frame::NONE)
-                            .font(egui::FontId::proportional(15.0))
-                            .desired_width(width - 40.0);
-                        let resp = ui.add(te);
+                        let resp = search_edit(ui, &mut q, width);
                         // Only when focus is missing: every request_focus interrupts the IME, and
                         // doing that each frame makes Wayland input methods drop key releases (#585).
                         if !resp.has_focus() {
@@ -523,5 +546,52 @@ mod tests {
         let ltr = area(false).expect("the palette is shown in LTR");
         assert!(rtl.intersects(ctx.content_rect()), "the RTL palette stays on screen");
         assert_eq!(rtl, ltr, "the palette keeps its place in both directions");
+    }
+
+    /// RTL: the search field runs right-to-left in a right-to-left UI — its hint galley has a
+    /// right-to-left paragraph base and sits at the field's right edge; LTR keeps egui's
+    /// default auto-direction, left-aligned edit.
+    #[test]
+    fn the_search_field_galley_is_rtl_in_rtl_and_ltr_in_ltr() {
+        let hint = tl!("Search commands, tools and panels…");
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        // Fonts bind on the next pass (as in open_palette_interrupts_the_ime_only_when_it_takes_focus).
+        let mut warmup = ctx.run_ui(Default::default(), |_| {});
+        warmup.textures_delta.clear();
+        for (dir, rtl) in [(crate::direction::Dir::Ltr, false), (crate::direction::Dir::Rtl, true)] {
+            let _scope = crate::direction::direction_scope(dir);
+            let mut q = String::new();
+            let mut field = egui::Rect::NOTHING;
+            let mut shapes = Vec::new();
+            // Two frames per direction so both are measured in the steady state.
+            for _ in 0..2 {
+                let mut out = ctx.run_ui(Default::default(), |ui| {
+                    ui.set_width(560.0);
+                    field = super::search_edit(ui, &mut q, 560.0).rect;
+                });
+                out.textures_delta.clear();
+                shapes = out.shapes;
+            }
+            fn hint_galley<'a>(shape: &'a egui::Shape, hint: &str) -> Option<(&'a egui::Galley, egui::Pos2)> {
+                match shape {
+                    egui::Shape::Text(t) if t.galley.job.text == hint => Some((&t.galley, t.pos)),
+                    egui::Shape::Vec(shapes) => shapes.iter().find_map(|s| hint_galley(s, hint)),
+                    _ => None,
+                }
+            }
+            let (g, pos) = shapes
+                .iter()
+                .find_map(|s| hint_galley(&s.shape, &hint))
+                .expect("the empty field paints its hint");
+            let want_dir = if rtl { egui::epaint::text::TextDirection::RightToLeft } else { egui::epaint::text::TextDirection::Auto };
+            assert_eq!(g.job.direction, want_dir, "{dir:?}: paragraph base direction");
+            let rect = egui::Rect::from_min_size(pos, g.size());
+            if rtl {
+                assert!(rect.right() > field.center().x, "{dir:?}: hint right-aligned in {field:?}, got {rect:?}");
+            } else {
+                assert!(rect.left() < field.center().x, "{dir:?}: hint left-aligned in {field:?}, got {rect:?}");
+            }
+        }
     }
 }
