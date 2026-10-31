@@ -182,7 +182,8 @@ fn define_page(ui: &mut egui::Ui, _t: &Tokens, layers: &[(u64, String, bool)], s
         ui.horizontal(|ui| {
             // name
             let mut name = d.get("name").and_then(Value::as_str).unwrap_or("").to_string();
-            if ui.add(egui::TextEdit::singleline(&mut name).hint_text(tl!("name")).desired_width(110.0)).changed() {
+            let mut layouter = crate::widgets::rtl_singleline_layouter(egui::FontId::default());
+            if ui.add(crate::widgets::rtl_singleline(&mut name, &mut layouter).hint_text(tl!("name")).desired_width(110.0)).changed() {
                 d["name"] = json!(name);
             }
             // layer
@@ -301,7 +302,8 @@ fn data_sets_page(ui: &mut egui::Ui, _t: &Tokens, state: &mut Value, fields: &mu
         let mut sname = set.get("name").and_then(Value::as_str).unwrap_or("").to_string();
         ui.horizontal(|ui| {
             let name_label = ui.label(tl!("Name:"));
-            if ui.add(egui::TextEdit::singleline(&mut sname).desired_width(200.0)).labelled_by(name_label.id).changed() {
+            let mut layouter = crate::widgets::rtl_singleline_layouter(egui::FontId::default());
+            if ui.add(crate::widgets::rtl_singleline(&mut sname, &mut layouter).desired_width(200.0)).labelled_by(name_label.id).changed() {
                 set["name"] = json!(sname);
             }
         });
@@ -333,13 +335,15 @@ fn data_sets_page(ui: &mut egui::Ui, _t: &Tokens, state: &mut Value, fields: &mu
                     }
                     "pixelReplacement" => {
                         let mut p = values[i].get("value").and_then(Value::as_str).unwrap_or("").to_string();
-                        if ui.add(egui::TextEdit::singleline(&mut p).hint_text(tl!("image file path")).desired_width(240.0)).changed() {
+                        let mut layouter = crate::widgets::rtl_singleline_layouter(egui::FontId::default());
+                        if ui.add(crate::widgets::rtl_singleline(&mut p, &mut layouter).hint_text(tl!("image file path")).desired_width(240.0)).changed() {
                             values[i]["value"] = json!(p);
                         }
                     }
                     _ => {
                         let mut txt = values[i].get("value").and_then(Value::as_str).unwrap_or("").to_string();
-                        if ui.add(egui::TextEdit::singleline(&mut txt).desired_width(240.0)).accessible_name(vname.clone()).changed() {
+                        let mut layouter = crate::widgets::rtl_singleline_layouter(egui::FontId::default());
+                        if ui.add(crate::widgets::rtl_singleline(&mut txt, &mut layouter).desired_width(240.0)).accessible_name(vname.clone()).changed() {
                             values[i]["value"] = json!(txt);
                         }
                     }
