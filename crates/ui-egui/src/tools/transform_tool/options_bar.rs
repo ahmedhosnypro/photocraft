@@ -343,9 +343,11 @@ pub(crate) fn position_size_fields(app: &mut PhotocraftApp, ui: &mut egui::Ui, t
     let rh = crate::widgets::value_field_extent(ui, &mut h, -hlim_u..=hlim_u, suffix, size_w, places, units, side_h).accessible_name(tl!("Height"));
     for r in [&rw, &rh] {
         r.context_menu(|ui| {
-            if let Some(name) = crate::rulers::unit_menu(ui, u.unit) {
-                set_size_unit(app, name);
-            }
+            crate::menus::popup_body(ui, |ui| {
+                if let Some(name) = crate::rulers::unit_menu(ui, u.unit) {
+                    set_size_unit(app, name);
+                }
+            });
         });
     }
     let (w, h) = (size_pct(&u, w, side_w) as f32, size_pct(&u, h, side_h) as f32);
