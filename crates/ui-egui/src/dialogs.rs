@@ -238,6 +238,12 @@ fn show_modal<T>(
         if !interactive {
             ui.disable();
         }
+        // Resize reads the style's direction for its grip: bottom-right in LTR, bottom-left in
+        // RTL. Pin it on this Ui so the grip follows the app's direction here, not only where
+        // the global style was last patched.
+        if crate::text::direction::is_rtl() {
+            ui.style_mut().set_right_to_left(true);
+        }
         if let Some(size) = fixed {
             egui::Resize::default().id(id.with("resize")).with_stroke(false).fixed_size(size).show(ui, |ui| {
                 ui.set_clip_rect(ui.clip_rect().expand(8.0));
@@ -363,7 +369,7 @@ fn dialog_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, d: &Dialog, fields: &
             }
         }
         DialogKind::About => {
-            // Tabs About · Contributors · Models. The
+            // Tabs About · Contributors · Models (craftrules standards/contributors.md). The
             // tab is a dialog field, so automation can switch it with `ui.dialog.set`.
             let tab = about_tab(fields);
             let mut chosen = tab;
@@ -571,10 +577,17 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
         let mut drag = egui::Vec2::ZERO;
         let mut close_clicked = false;
         let mut sizing = false;
-        let area = match start {
+        let rtl = crate::text::direction::is_rtl();
+        let mut area = match start {
             Some(offset) => egui::Modal::default_area(id).anchor(egui::Align2::LEFT_TOP, offset),
             None => egui::Modal::default_area(id),
         };
+        if rtl {
+            // Seed the area's min rect at its right edge (the mirrored host body layout): the
+            // right-anchored resize rect then sets the area's width, so a shrink drag shrinks
+            // the window frame itself, not only the contents inside it.
+            area = area.layout(crate::text::direction::body_layout());
+        }
         // Only the last dialog takes input, and egui only lets the modal drawn on top take input,
         // so the last one must be drawn above the others. egui can raise an older one (it raises an
         // area that is pressed or wasn't drawn the frame before), which left a greyed-out dialog
@@ -728,12 +741,30 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
         {
             ctx.data_mut(|m| m.insert_persisted(size_id(place), size));
         }
-        // Pin once laid out at its real size (the first frame is an invisible sizing pass).
-        if !sizing && (web || fixed.is_some() || pinned.is_none() || drag != egui::Vec2::ZERO) {
+        // Pin once laid out at its real size (the first frame is an invisible sizing pass). In a
+        // right-to-left UI the pin runs every frame: the resize grip sits at the bottom-left and
+        // anchors the right edge, so the left-top pin is recomputed from that edge as the width
+        // changes, keeping the right edge put while the dialog grows towards the left.
+        let reanchor = web || fixed.is_some() || pinned.is_none() || drag != egui::Vec2::ZERO;
+        if !sizing && (reanchor || rtl) {
             let screen = ctx.content_rect();
+            let rect = modal.response.rect;
             // Keep the whole dialog (and so its title bar) on screen.
-            let room = (screen.size() - modal.response.rect.size()).max(egui::Vec2::ZERO);
-            let offset = (pinned.unwrap_or(modal.response.rect.min - screen.min) + drag).clamp(egui::Vec2::ZERO, room);
+            let room = (screen.size() - rect.size()).max(egui::Vec2::ZERO);
+            let offset = if rtl {
+                let right_id = id.with("right-edge");
+                let right = if reanchor {
+                    let right = rect.right() + drag.x;
+                    ctx.data_mut(|m| m.insert_temp(right_id, right));
+                    right
+                } else {
+                    ctx.data(|m| m.get_temp::<f32>(right_id)).unwrap_or(rect.right())
+                };
+                let y = (pinned.map_or(rect.top() - screen.top(), |p| p.y) + drag.y).clamp(0.0, room.y);
+                egui::vec2(right - screen.left() - rect.width(), y)
+            } else {
+                (pinned.unwrap_or(rect.min - screen.min) + drag).clamp(egui::Vec2::ZERO, room)
+            };
             ctx.data_mut(|m| m.insert_temp(id, offset));
             // A dialog the user moved reopens there (Photoshop remembers each dialog's place).
             if drag != egui::Vec2::ZERO {
@@ -795,16 +826,23 @@ fn about_tab_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, tab: &str) {
         "contributors" => crate::credits::contributors_ui(app, ui),
         "models" => crate::credits::models_ui(ui),
         _ => {
-            ui.label(tl!("PhotoCraft — an open-source, native image editor written in Rust."));
-            ui.label(crate::i18n::fmt(tl!("Version {version}"), &[("version", &photocraft_engine::build_info::long_version())]));
-            ui.add_space(12.0);
-            ui.vertical_centered(|ui| {
-                crate::links::discord_button(app, ui, 220.0);
-                ui.add_space(8.0);
-                crate::links::link_row(app, ui);
+            // The dialog body mirrors its blocks one by one; this one mirrors as a whole, so
+            // its lines read from the right like the sibling tabs' bodies (credits.rs).
+            crate::text::direction::window_body(ui, |ui| {
+                crate::text::direction::body_label(ui, tl!("PhotoCraft — an open-source, native image editor written in Rust."));
+                crate::text::direction::body_label(
+                    ui,
+                    crate::i18n::fmt(tl!("Version {version}"), &[("version", &photocraft_engine::build_info::long_version())]),
+                );
+                ui.add_space(12.0);
+                ui.vertical_centered(|ui| {
+                    crate::links::discord_button(app, ui, 220.0);
+                    ui.add_space(8.0);
+                    crate::links::link_row(app, ui);
+                });
+                ui.add_space(10.0);
+                crate::text::direction::body_label(ui, egui::RichText::new("egui · wgpu · photocraft-engine").weak());
             });
-            ui.add_space(10.0);
-            ui.weak("egui · wgpu · photocraft-engine");
         }
     }
 }
@@ -1200,6 +1238,37 @@ mod preference_resize_tests {
         assert_eq!(resizable_dialog(web.as_object().unwrap()), Some(egui::vec2(960.0, 900.0)));
     }
 
+    /// The resize grip sits in the frame's bottom corner at the reading end: bottom-right in
+    /// LTR, mirrored to bottom-left in RTL.
+    #[test]
+    fn resize_grip_sits_at_the_reading_end_corner() {
+        for dir in [crate::text::direction::Dir::Ltr, crate::text::direction::Dir::Rtl] {
+            let _scope = crate::text::direction::direction_scope(dir);
+            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+            crate::prefs_ui::open_preferences(&mut app, "interface");
+            let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
+                |ui, app| {
+                    if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("semibold".into()))) {
+                        show(app, ui.ctx());
+                    }
+                },
+                app,
+            );
+            PhotocraftApp::setup_context(&h.ctx, Default::default());
+            h.run_steps(5);
+            let dialog = h.state().ui.dialogs[0].id;
+            let grip_id = egui::Id::unique(("dialog", dialog)).with("resize").with("__resize_corner");
+            let grip = h.ctx.read_response(grip_id).expect("the resize grip is there").rect;
+            let f = frame(&h);
+            assert!((grip.bottom() - f.bottom()).abs() < 40.0, "{dir:?}: grip {grip:?} at the frame's bottom in {f:?}");
+            if dir == crate::text::direction::Dir::Rtl {
+                assert!(grip.left() - f.left() < 40.0 && grip.center().x < f.center().x, "RTL: grip {grip:?} bottom-left of frame {f:?}");
+            } else {
+                assert!(f.right() - grip.right() < 40.0 && grip.center().x > f.center().x, "LTR: grip {grip:?} bottom-right of frame {f:?}");
+            }
+        }
+    }
+
     /// Drags the dialog's resize grip (its frame's bottom-right corner) by `by`.
     fn drag_corner(h: &mut egui_kittest::Harness<'_, PhotocraftApp>, by: egui::Vec2) {
         let corner = frame(h).max - egui::vec2(14.0, 14.0);
@@ -1216,6 +1285,27 @@ mod preference_resize_tests {
     fn frame(h: &egui_kittest::Harness<'_, PhotocraftApp>) -> egui::Rect {
         let rects: Vec<egui::Rect> = h.ctx.data(|m| m.get_temp(egui::Id::unique(RECTS))).unwrap();
         rects[0]
+    }
+
+    /// The dialog's outer window rect (its egui area), not just the content frame inside it.
+    fn outer_frame(h: &egui_kittest::Harness<'_, PhotocraftApp>) -> egui::Rect {
+        let dialog = h.state().ui.dialogs[0].id;
+        h.ctx.memory(|m| m.area_rect(egui::Id::unique(("dialog", dialog)))).expect("the dialog's area rect")
+    }
+
+    /// Drags the dialog's resize grip — the frame's bottom corner at the reading end — by `by`.
+    fn drag_grip(h: &mut egui_kittest::Harness<'_, PhotocraftApp>, by: egui::Vec2) {
+        let dialog = h.state().ui.dialogs[0].id;
+        let grip_id = egui::Id::unique(("dialog", dialog)).with("resize").with("__resize_corner");
+        let corner = h.ctx.read_response(grip_id).expect("the resize grip is there").rect.center();
+        h.event(egui::Event::PointerMoved(corner));
+        h.step();
+        h.event(egui::Event::PointerButton { pos: corner, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.step();
+        h.event(egui::Event::PointerMoved(corner + by));
+        h.step();
+        h.event(egui::Event::PointerButton { pos: corner + by, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+        h.run_steps(4);
     }
 
     /// The button row sits in the frame's bottom-right corner (its order follows the platform):
@@ -1257,6 +1347,82 @@ mod preference_resize_tests {
         // The contents never ask for more than the dialog gives them, so it keeps its size.
         h.run_steps(10);
         assert_eq!(frame(&h), smaller);
+    }
+
+    /// A grip drag grows the dialog away from its anchored edge: the top-left stays put in LTR
+    /// (bottom-right grip), the top-right in RTL (bottom-left grip).
+    #[test]
+    fn resize_drag_anchors_the_top_reading_start_corner() {
+        for dir in [crate::text::direction::Dir::Ltr, crate::text::direction::Dir::Rtl] {
+            let _scope = crate::text::direction::direction_scope(dir);
+            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+            crate::prefs_ui::open_preferences(&mut app, "interface");
+            let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
+                |ui, app| {
+                    if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("semibold".into()))) {
+                        show(app, ui.ctx());
+                    }
+                },
+                app,
+            );
+            PhotocraftApp::setup_context(&h.ctx, Default::default());
+            h.run_steps(5);
+            let opened = frame(&h);
+            let rtl = dir == crate::text::direction::Dir::Rtl;
+            let by = if rtl { egui::vec2(-220.0, 80.0) } else { egui::vec2(220.0, 80.0) };
+            drag_grip(&mut h, by);
+            let resized = frame(&h);
+            assert!(resized.width() > opened.width() + 150.0 && resized.height() > opened.height() + 50.0, "{dir:?}: grew: {opened:?} -> {resized:?}");
+            assert!((resized.top() - opened.top()).abs() < 4.0, "{dir:?}: the top edge stays: {opened:?} -> {resized:?}");
+            if rtl {
+                assert!((resized.right() - opened.right()).abs() < 4.0 && resized.left() < opened.left() - 150.0, "RTL: the right edge is anchored: {opened:?} -> {resized:?}");
+            } else {
+                assert!((resized.left() - opened.left()).abs() < 4.0 && resized.right() > opened.right() + 150.0, "LTR: the left edge is anchored: {opened:?} -> {resized:?}");
+            }
+        }
+    }
+
+    /// A grip drag that shrinks the dialog shrinks the window frame itself, not just its contents:
+    /// the top-left stays put in LTR (bottom-right grip), the top-right in RTL (bottom-left grip).
+    #[test]
+    fn resize_shrink_drag_shrinks_the_frame() {
+        for dir in [crate::text::direction::Dir::Ltr, crate::text::direction::Dir::Rtl] {
+            let _scope = crate::text::direction::direction_scope(dir);
+            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+            crate::prefs_ui::open_preferences(&mut app, "interface");
+            let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
+                |ui, app| {
+                    if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("semibold".into()))) {
+                        show(app, ui.ctx());
+                    }
+                },
+                app,
+            );
+            PhotocraftApp::setup_context(&h.ctx, Default::default());
+            h.run_steps(5);
+            let opened = frame(&h);
+            let outer_frame_before = outer_frame(&h);
+            let rtl = dir == crate::text::direction::Dir::Rtl;
+            let by = if rtl { egui::vec2(260.0, -120.0) } else { egui::vec2(-260.0, -120.0) };
+            drag_grip(&mut h, by);
+            let shrunk = frame(&h);
+            assert!(shrunk.width() < opened.width() - 150.0 && shrunk.height() < opened.height() - 60.0, "{dir:?}: shrank: {opened:?} -> {shrunk:?}");
+            assert!((shrunk.top() - opened.top()).abs() < 4.0, "{dir:?}: the top edge stays: {opened:?} -> {shrunk:?}");
+            if rtl {
+                assert!((shrunk.right() - opened.right()).abs() < 4.0 && shrunk.left() > opened.left() + 150.0, "RTL: the right edge is anchored: {opened:?} -> {shrunk:?}");
+            } else {
+                assert!((shrunk.left() - opened.left()).abs() < 4.0 && shrunk.right() < opened.right() - 150.0, "LTR: the left edge is anchored: {opened:?} -> {shrunk:?}");
+            }
+            // The window frame itself (the dialog's outer area), not just the content, shrinks.
+            let outer_opened = outer_frame_before;
+            let outer_shrunk = outer_frame(&h);
+            assert!(outer_shrunk.width() < outer_opened.width() - 150.0 && outer_shrunk.height() < outer_opened.height() - 60.0, "{dir:?}: the outer frame shrank: {outer_opened:?} -> {outer_shrunk:?}");
+            if rtl {
+                assert!((outer_shrunk.right() - outer_opened.right()).abs() < 4.0, "RTL: the outer right edge is anchored: {outer_opened:?} -> {outer_shrunk:?}");
+            } else {
+                assert!((outer_shrunk.left() - outer_opened.left()).abs() < 4.0, "LTR: the outer left edge is anchored: {outer_opened:?} -> {outer_shrunk:?}");
+            }
+        }
     }
 
     /// #8199: no outline is drawn just around the contents, which left the title flush against a
