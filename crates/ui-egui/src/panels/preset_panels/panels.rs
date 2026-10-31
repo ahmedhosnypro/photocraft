@@ -811,4 +811,29 @@ mod tests {
         assert!(close_rtl.left() < 60.0, "RTL: the window opens at the canvas's left edge ({close_rtl:?})");
         assert!(close_rtl.right() < x_rtl + 60.0, "RTL: the close box hugs the header row's left end ({close_rtl:?})");
     }
+
+    #[test]
+    fn probe_styles_window_header() {
+        use egui_kittest::{Harness, kittest::{NodeT, Queryable}};
+        let canvas = Rect::from_min_size(pos2(0.0, 0.0), vec2(1000.0, 700.0));
+        let _scope = crate::direction::direction_scope(crate::direction::Dir::Ltr);
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        app.run("file.new", json!({"width": 64, "height": 48})).unwrap();
+        app.ui.presets_ui.styles = true;
+        app.last_canvas_rect = canvas;
+        let mut h = Harness::builder().with_size(vec2(1100.0, 800.0)).build_ui_state(|ui, app| { windows(app, ui.ctx()); }, app);
+        h.run_steps(3);
+        eprintln!("probe is_rtl={} style_rtl={}", crate::direction::is_rtl(), h.ctx.style_of(egui::Theme::Dark).right_to_left);
+        for n in h.query_all_by_label("Close") {
+            eprintln!("probe Close rect={:?} role={:?}", n.rect(), n.accesskit_node().role());
+        }
+        for n in h.query_all_by_label("Styles") {
+            eprintln!("probe Styles rect={:?} role={:?}", n.rect(), n.accesskit_node().role());
+        }
+        for s in &h.output().shapes {
+            if let egui::Shape::Text(t) = &s.shape {
+                eprintln!("probe text {:?} pos={:?}", t.galley.job.text, t.pos);
+            }
+        }
+    }
 }
