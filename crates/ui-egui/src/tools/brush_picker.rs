@@ -85,6 +85,13 @@ pub(crate) fn open(ui: &mut crate::state::UiState, ctx: &egui::Context, at: [f32
     crate::canvas_popup::mark_open(ctx, picker_id());
 }
 
+/// Where the picker opens under a rect it hangs from (the options-bar brush chip): the rect's
+/// reading-start edge, 2 pt below it — its left edge left-to-right, its right edge in a
+/// right-to-left UI, so the picker hangs from the same corner the chip reads from.
+pub fn chip_anchor(r: egui::Rect) -> [f32; 2] {
+    [crate::direction::start_x(r, 0.0), r.bottom() + 2.0]
+}
+
 /// The options-bar brush chip that shows and hides the picker. A press on it isn't an outside
 /// press that closes the picker: the chip's click toggles it.
 pub fn chip_id() -> egui::Id {
@@ -353,11 +360,7 @@ pub fn resize_grip(ui: &mut egui::Ui, frame: egui::Rect, content: egui::Vec2) ->
     let corner = if rtl { grip.left_bottom() + vec2(3.0, -3.0) } else { grip.right_bottom() - vec2(3.0, 3.0) };
     for i in 0..3 {
         let o = i as f32 * 4.0;
-        let (from, to) = if rtl {
-            (corner + vec2(o, 0.0), corner - vec2(0.0, o))
-        } else {
-            (corner - vec2(o, 0.0), corner - vec2(0.0, o))
-        };
+        let (from, to) = if rtl { (corner + vec2(o, 0.0), corner - vec2(0.0, o)) } else { (corner - vec2(o, 0.0), corner - vec2(0.0, o)) };
         ui.painter().line_segment([from, to], Stroke::new(1.0, t.text_faint));
     }
     if resp.hovered() || resp.dragged() {
@@ -391,40 +394,102 @@ fn gear_menu(ui: &mut egui::Ui, current: Option<&str>, presets: &[BrushPreset], 
         other => other,
     };
     egui::Popup::menu(&gear).anchor(anchor).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-        if ui.button(tl!("New Brush Preset…")).clicked() {
-            picks.push(Pick::NewPreset);
-            ui.close();
-        }
-        ui.separator();
-        let current = current.filter(|n| presets.iter().any(|p| p.name.eq_ignore_ascii_case(n))).map(str::to_string);
-        ui.add_enabled_ui(current.is_some(), |ui| {
-            if ui.button(tl!("Rename Brush…")).clicked()
-                && let Some(name) = current.clone()
-            {
-                st.renaming = Some(Renaming { group: false, name, folder: Vec::new(), text: String::new() });
-                ui.close();
-            }
-            if ui.button(tl!("Delete Brush")).clicked()
-                && let Some(name) = current.clone()
-            {
-                picks.push(Pick::List(Action::Delete(name)));
-                ui.close();
-            }
-        });
-        ui.separator();
-        // What a preset's card shows: a checkbox per part. At least one stays on — clicking the
-        // last checked box does nothing, since an empty card would show no brush at all.
-        let on = [st.show_name, st.show_stroke, st.show_tip].into_iter().filter(|b| *b).count();
-        for (flag, label) in [(&mut st.show_name, tl!("Brush Name")), (&mut st.show_stroke, tl!("Brush Stroke")), (&mut st.show_tip, tl!("Brush Tip"))] {
-            let was = *flag;
-            if ui.checkbox(flag, label).changed() && was && on == 1 {
-                *flag = true;
-            }
-        }
-        ui.separator();
-        if ui.button(tl!("Import Brushes…")).clicked() {
-            picks.push(Pick::Import);
-            ui.close();
-        }
+        crate::direction::popup_body(ui, |ui| gear_menu_body(ui, current, presets, st, picks))
     });
+}
+
+/// The gear menu's rows: through the shared [`crate::menu_keys::menu_row`], so they mirror in a
+/// right-to-left UI instead of laying their atoms left-to-right like a plain `ui.button`.
+fn gear_menu_body(ui: &mut egui::Ui, current: Option<&str>, presets: &[BrushPreset], st: &mut BrushesPanelState, picks: &mut Vec<Pick>) {
+    if crate::menu_keys::menu_row(ui, tl!("New Brush Preset…"), None, false, true).clicked() {
+        picks.push(Pick::NewPreset);
+        ui.close();
+    }
+    ui.separator();
+    let current = current.filter(|n| presets.iter().any(|p| p.name.eq_ignore_ascii_case(n))).map(str::to_string);
+    let enabled = current.is_some();
+    if crate::menu_keys::menu_row(ui, tl!("Rename Brush…"), None, false, enabled).clicked()
+        && let Some(name) = current.clone()
+    {
+        st.renaming = Some(Renaming { group: false, name, folder: Vec::new(), text: String::new() });
+        ui.close();
+    }
+    if crate::menu_keys::menu_row(ui, tl!("Delete Brush"), None, false, enabled).clicked()
+        && let Some(name) = current.clone()
+    {
+        picks.push(Pick::List(Action::Delete(name)));
+        ui.close();
+    }
+    ui.separator();
+    // What a preset's card shows: a checkbox per part. At least one stays on — clicking the
+    // last checked box does nothing, since an empty card would show no brush at all.
+    let on = [st.show_name, st.show_stroke, st.show_tip].into_iter().filter(|b| *b).count();
+    for (flag, label) in [(&mut st.show_name, tl!("Brush Name")), (&mut st.show_stroke, tl!("Brush Stroke")), (&mut st.show_tip, tl!("Brush Tip"))] {
+        let was = *flag;
+        if ui.checkbox(flag, label).changed() && was && on == 1 {
+            *flag = true;
+        }
+    }
+    ui.separator();
+    if crate::menu_keys::menu_row(ui, tl!("Import Brushes…"), None, false, true).clicked() {
+        picks.push(Pick::Import);
+        ui.close();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::direction::{Dir, direction_scope};
+
+    /// The gear menu's rows mirror in a right-to-left UI: each label hugs the row's right edge;
+    /// left-to-right they keep the plain button's left edge.
+    #[test]
+    fn gear_menu_rows_mirror_in_rtl() {
+        let render = |dir: Dir| -> Vec<(String, egui::Rect)> {
+            let _scope = direction_scope(dir);
+            let ctx = egui::Context::default();
+            ctx.all_styles_mut(|s| s.right_to_left = dir == Dir::Rtl);
+            let mut out = ctx.run_ui(
+                egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(500.0, 400.0))), ..Default::default() },
+                |ui| {
+                    let mut st = BrushesPanelState::default();
+                    let mut picks = Vec::new();
+                    ui.allocate_ui_with_layout(egui::vec2(260.0, 300.0), egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                        gear_menu_body(ui, Some("Soft Round"), &[], &mut st, &mut picks);
+                    });
+                },
+            );
+            let texts = out
+                .shapes
+                .iter()
+                .filter_map(|cs| match &cs.shape {
+                    egui::Shape::Text(ts) => Some((ts.galley.text().to_string(), ts.visual_bounding_rect())),
+                    _ => None,
+                })
+                .collect();
+            out.textures_delta.clear();
+            texts
+        };
+        let at = |v: &[(String, egui::Rect)], s: &str| v.iter().find(|(t, _)| t.contains(s)).map(|(_, r)| *r).unwrap_or(egui::Rect::NOTHING);
+        let rtl = render(Dir::Rtl);
+        let new = at(&rtl, "New Brush Preset");
+        assert!(new.right() > 260.0 - 32.0, "rtl: the row's label hugs the right edge: {new:?}");
+        let ltr = render(Dir::Ltr);
+        let new = at(&ltr, "New Brush Preset");
+        assert!(new.left() < 32.0, "ltr: the row's label stays at the left edge: {new:?}");
+    }
+
+    /// The chip anchor sits at the chip's reading-start edge — its left edge left-to-right, its
+    /// right edge in a right-to-left UI — 2 pt below the chip either way.
+    #[test]
+    fn chip_anchor_follows_the_reading_start_edge() {
+        let r = egui::Rect::from_min_size(egui::pos2(100.0, 50.0), egui::vec2(44.0, 30.0));
+        for (dir, want_x) in [(Dir::Ltr, r.left()), (Dir::Rtl, r.right())] {
+            let _scope = direction_scope(dir);
+            let [x, y] = chip_anchor(r);
+            assert_eq!(x, want_x, "{dir:?}");
+            assert_eq!(y, r.bottom() + 2.0, "{dir:?}");
+        }
+    }
 }

@@ -101,6 +101,15 @@ pub fn panel_menu_button(ui: &mut Ui) -> Response {
     resp.on_hover_text(tip)
 }
 
+/// The panel menu button's popup: an `egui::Popup::menu` whose body goes through
+/// [`crate::text::direction::popup_body`], so a panel "…" menu mirrors in a right-to-left UI
+/// by default instead of each call site remembering the scope. Left-to-right the popup's own
+/// layout is used unchanged. Not yet re-exported through `widgets`, so only tests use it.
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn panel_menu_popup<R>(button: &Response, add_contents: impl FnOnce(&mut Ui) -> R) -> Option<egui::InnerResponse<R>> {
+    egui::Popup::menu(button).show(|ui| crate::text::direction::popup_body(ui, add_contents))
+}
+
 pub fn pill_tab(ui: &mut Ui, label: &str, selected: bool) -> Response {
     let t = Tokens::get(ui.ctx());
     let translated = tl!(label);
@@ -149,4 +158,74 @@ pub fn chevron_icon(ui: &Ui, rect: Rect, visuals: &egui::style::WidgetVisuals, _
     let stroke = Stroke::new(1.3, visuals.fg_stroke.color.gamma_multiply(0.8));
     ui.painter().line_segment([c + vec2(-s, -s * 0.5), c + vec2(0.0, s * 0.5)], stroke);
     ui.painter().line_segment([c + vec2(0.0, s * 0.5), c + vec2(s, -s * 0.5)], stroke);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::direction::{Dir, direction_scope};
+
+    /// Render `panel_menu_popup` open over its button — a click on frame 1, then steady frames —
+    /// and return the popup area's rect and the painted text galley rects.
+    fn panel_menu_texts(dir: Dir) -> (egui::Rect, Vec<(String, egui::Rect)>) {
+        let _scope = direction_scope(dir);
+        let ctx = egui::Context::default();
+        ctx.all_styles_mut(|s| s.right_to_left = dir == Dir::Rtl);
+        let mut btn_rect = egui::Rect::NOTHING;
+        let mut popup = egui::Rect::NOTHING;
+        let mut texts = Vec::new();
+        for frame in 0..4 {
+            let mut events = Vec::new();
+            if frame == 1 {
+                let pos = btn_rect.center();
+                events.push(egui::Event::PointerMoved(pos));
+                events.push(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+            }
+            if frame == 2 {
+                let pos = btn_rect.center();
+                events.push(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+            }
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 600.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    let btn = panel_menu_button(ui);
+                    btn_rect = btn.rect;
+                    panel_menu_popup(&btn, |ui| {
+                        ui.set_min_width(180.0);
+                        crate::menu_keys::menu_row(ui, "Panel menu item", None, false, true);
+                    })
+                    .map(|r| popup = r.response.rect);
+                },
+            );
+            texts = out
+                .shapes
+                .iter()
+                .filter_map(|cs| match &cs.shape {
+                    egui::Shape::Text(ts) => Some((ts.galley.text().to_string(), cs.shape.visual_bounding_rect())),
+                    _ => None,
+                })
+                .collect();
+            out.textures_delta.clear();
+        }
+        (popup, texts)
+    }
+
+    /// A panel menu popup's rows mirror in a right-to-left UI (their labels hug the popup's
+    /// right edge); left-to-right the popup's own pinned layout keeps them at the left edge.
+    #[test]
+    fn panel_menu_popup_mirrors_only_in_rtl() {
+        let at = |v: &[(String, egui::Rect)], s: &str| v.iter().find(|(t, _)| t.contains(s)).map(|(_, r)| *r).unwrap_or(egui::Rect::NOTHING);
+        let (rtl_popup, rtl) = panel_menu_texts(Dir::Rtl);
+        let (ltr_popup, ltr) = panel_menu_texts(Dir::Ltr);
+        assert!(rtl_popup.is_positive() && ltr_popup.is_positive(), "the popups opened: {rtl_popup:?} {ltr_popup:?}");
+        let slack = 32.0;
+        let label = at(&rtl, "Panel menu item");
+        assert!(label.is_positive() && rtl_popup.right() - label.right() < slack, "rtl: the row hugs the popup's right edge: {label:?} in {rtl_popup:?}");
+        let label = at(&ltr, "Panel menu item");
+        assert!(label.is_positive() && label.left() - ltr_popup.left() < slack, "ltr: the row keeps the popup's left edge: {label:?} in {ltr_popup:?}");
+    }
 }
