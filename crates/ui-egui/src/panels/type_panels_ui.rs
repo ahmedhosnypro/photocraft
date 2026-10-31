@@ -1075,9 +1075,10 @@ mod tests {
         for (rtl, mirrored) in [(false, false), (true, true)] {
             let _dir = crate::text::direction::direction_scope(if rtl { crate::text::direction::Dir::Rtl } else { crate::text::direction::Dir::Ltr });
             let mut app = app_with_text("Hi");
-            app.ui.type_panels.styles = true;
             let mut h = egui_kittest::Harness::builder().with_size(vec2(1000.0, 700.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
             PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+            // The fonts are set up after the harness's first frame: the window appears after it.
+            h.state_mut().ui.type_panels.styles = true;
             h.run_steps(4);
             let close = h.get_by_label("Close").rect();
             let character = h.get_by_label("Character Styles").rect();
@@ -1096,6 +1097,7 @@ mod tests {
     /// UI, the mirror of its left-to-right placement.
     #[test]
     fn rtl_check_spellings_close_box_is_at_the_reading_end() {
+        use egui::accesskit::Role;
         use egui_kittest::kittest::Queryable;
         let _rtl = crate::text::direction::direction_scope(crate::text::direction::Dir::Rtl);
         let mut app = app_with_text("Teh cat");
@@ -1113,7 +1115,8 @@ mod tests {
         let done = h.get_by_label("Done").rect();
         assert!(x.bottom() <= done.top(), "the × ends the title row: {x:?} over {done:?}");
         assert!(x.left() <= done.left(), "the × is at the reading end in a right-to-left UI: {x:?} over {done:?}");
-        let title = h.get_by_label("Check Spelling").rect();
+        // The window node carries the same title; the in-dialog caption is the label node.
+        let title = h.get_by_role_and_label(Role::Label, "Check Spelling").rect();
         assert!(((x.left() + title.right()) / 2.0 - 500.0).abs() < 4.0, "the window stays centred: {x:?} over {title:?}");
     }
 
@@ -1125,10 +1128,11 @@ mod tests {
         for (rtl, after) in [(false, false), (true, true)] {
             let _dir = crate::text::direction::direction_scope(if rtl { crate::text::direction::Dir::Rtl } else { crate::text::direction::Dir::Ltr });
             let mut app = app_with_text("Hi");
-            app.ui.type_panels.styles = true;
-            app.ui.type_panels.glyphs = true;
             let mut h = egui_kittest::Harness::builder().with_size(vec2(1000.0, 700.0)).build_ui_state(|ui, app| windows(app, ui.ctx()), app);
             PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
+            // The fonts are set up after the harness's first frame: the windows appear after it.
+            h.state_mut().ui.type_panels.styles = true;
+            h.state_mut().ui.type_panels.glyphs = true;
             h.run_steps(4);
             // The windows' own titles are their egui ids, not widgets: the "Show:" caption of the
             // Glyphs panel and a Type Styles tab say where each window sits.
