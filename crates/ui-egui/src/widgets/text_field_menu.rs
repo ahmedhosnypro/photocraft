@@ -218,7 +218,11 @@ fn draw(ctx: &Context, open: &Open) -> Option<Action> {
     let id = menu_id();
     let screen = ctx.content_rect();
     let size = ctx.memory(|m| m.area_rect(id)).map_or(egui::vec2(180.0, 170.0), |r| r.size());
-    let pos = egui::pos2(open.pos.x.min(screen.right() - size.x).max(screen.left()), open.pos.y.min(screen.bottom() - size.y).max(screen.top()));
+    // The menu hangs from the pointer at its reading-start edge: its left edge left-to-right, its
+    // right edge right-to-left, clamped to the window either way.
+    let rtl = crate::direction::is_rtl();
+    let x = if rtl { open.pos.x - size.x } else { open.pos.x };
+    let pos = egui::pos2(x.min(screen.right() - size.x).max(screen.left()), open.pos.y.min(screen.bottom() - size.y).max(screen.top()));
     let mut chosen = None;
     egui::Area::new(id).order(egui::Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
         egui::Frame::menu(ui.style()).show(ui, |ui| {
@@ -454,5 +458,25 @@ mod tests {
         assert!(h.query_by_label_contains(&format!("{shortcut} Undo")).is_some(), "and the row reads in that order");
         assert_eq!(choose(&mut h, "Select All"), None, "the items are still chosen");
         assert_eq!(open_on(&h.ctx), None, "choosing closes the menu");
+    }
+
+    /// The menu opens at the pointer with its reading-start edge there: its left edge in a
+    /// left-to-right UI, its right edge in a right-to-left one.
+    #[test]
+    fn the_edit_menu_hangs_from_the_pointer_at_its_reading_start_edge() {
+        let _ltr = crate::direction::direction_scope(crate::direction::Dir::Ltr);
+        let (mut h, field) = renaming();
+        let at = h.ctx.read_response(field).unwrap().rect.center();
+        right_click(&mut h, field);
+        let menu = h.ctx.memory(|m| m.area_rect(super::menu_id())).expect("the menu is drawn");
+        assert!((menu.left() - at.x).abs() < 1.0, "LTR: the menu's left edge is at the pointer ({menu:?} vs {at:?})");
+
+        let _rtl = crate::direction::direction_scope(crate::direction::Dir::Rtl);
+        let (mut h, field) = renaming();
+        crate::theme::set_direction(&h.ctx, true);
+        let at = h.ctx.read_response(field).unwrap().rect.center();
+        right_click(&mut h, field);
+        let menu = h.ctx.memory(|m| m.area_rect(super::menu_id())).expect("the menu is drawn");
+        assert!((menu.right() - at.x).abs() < 1.0, "RTL: the menu's right edge is at the pointer ({menu:?} vs {at:?})");
     }
 }
