@@ -6,22 +6,16 @@ pub(super) fn render_level(ui: &mut egui::Ui, items: &[&MenuItem], depth: usize,
     render_level_with(ui, depth, nav, |ui, nav| render_level_rows(ui, items, depth, clicked, nav));
 }
 
+/// Menu popup bodies go through the shared [`crate::direction::popup_body`] direction wrapper;
+/// re-exported here so `menus::popup_body` call sites keep working.
+pub(crate) use crate::direction::popup_body;
+
 /// One menu level, with `pre` drawing the level's content (its rows, or the Help search above
 /// them). Menu popups can be taller than the window: each level stays on screen and scrolls
-/// (wheel, scroll arrows, keyboard), like a native menu on a small display. This is the one
-/// place that scopes a level's body: egui pins the popup's own layout left-to-right, so in a
-/// right-to-left UI each level scopes its body itself. The cross align stays `Min`: rows fill
-/// the width (justified), and a `Max` align would seed the scope's `min_rect` at the far edge
-/// of the pinned `max_rect`, so the sizing pass would measure the popup at the full default
-/// area width instead of the rows' width.
+/// (wheel, scroll arrows, keyboard), like a native menu on a small display. The level's body
+/// goes through [`popup_body`] like every menu popup body.
 pub(super) fn render_level_with(ui: &mut egui::Ui, depth: usize, nav: &mut crate::menu_nav::Nav, pre: impl FnOnce(&mut egui::Ui, &mut crate::menu_nav::Nav)) {
-    if ui.style().right_to_left {
-        ui.scope_builder(egui::UiBuilder::new().max_rect(ui.max_rect()).layout(egui::Layout::top_down_justified(egui::Align::Min)), |ui| {
-            crate::menu_nav::level(ui, depth, nav, pre)
-        });
-    } else {
-        crate::menu_nav::level(ui, depth, nav, pre);
-    }
+    popup_body(ui, |ui| crate::menu_nav::level(ui, depth, nav, pre));
 }
 
 /// Height of a menu separator: a line with room above and below, as in native menus.
@@ -176,7 +170,7 @@ fn submenu_row<R>(ui: &mut egui::Ui, title: egui::WidgetText, content: impl FnOn
     if hidden && !open {
         return (response, None);
     }
-    let inner = SubMenu::new().show(ui, &response, content);
+    let inner = SubMenu::new().show(ui, &response, |ui| popup_body(ui, content));
     (response, inner.map(|r| r.inner))
 }
 
@@ -452,5 +446,85 @@ mod rtl_tests {
         let (direct_texts, direct_w) = level_via(crate::direction::Dir::Ltr, false);
         assert!(ltr_w <= 300.0 + 0.5 && direct_w <= 300.0 + 0.5, "ltr: min_rect {ltr_w}/{direct_w} inside a 300-wide popup");
         assert_eq!(ltr_texts, direct_texts, "ltr: render_level took the RTL scope");
+    }
+
+    /// Render one level (an enabled row with a shortcut, a disabled row without one, a submenu
+    /// row) through the same `Popup::menu` path the menu bar uses, run the sizing pass plus
+    /// steady frames, and return the popup's rect and the painted text galley rects.
+    fn popup_level_texts(dir: crate::direction::Dir) -> (egui::Rect, Vec<(String, egui::Rect)>) {
+        let _scope = crate::direction::direction_scope(dir);
+        let ctx = egui::Context::default();
+        ctx.all_styles_mut(|s| s.right_to_left = dir == crate::direction::Dir::Rtl);
+        let item = |id: &str, label: &str, path: &[&str], shortcut: Option<&str>, enabled: bool| MenuItem {
+            id: id.to_string(),
+            label: label.to_string(),
+            path: path.iter().map(|s| s.to_string()).collect(),
+            shortcut: shortcut.map(str::to_string),
+            enabled,
+            checked: None,
+            color: None,
+        };
+        let items = [
+            item("edit.undo", "Undo", &["Edit"], Some("Ctrl+Z"), true),
+            item("edit.spellCheck", "Spell Check", &["Edit"], None, false),
+            item("edit.sub.item", "Item", &["Edit", "Sub"], None, true),
+        ];
+        let refs: Vec<&MenuItem> = items.iter().collect();
+        let mut popup = egui::Rect::NOTHING;
+        let mut texts = Vec::new();
+        for _ in 0..3 {
+            let mut clicked = None;
+            let mut nav = crate::menu_nav::Nav::default();
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 600.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    let btn = ui.button("Edit");
+                    if let Some(r) = egui::Popup::menu(&btn)
+                        .open_memory(Some(egui::SetOpenCommand::Bool(true)))
+                        .show(|ui| {
+                            ui.set_min_width(220.0);
+                            popup_body(ui, |ui| render_level(ui, &refs, 1, &mut clicked, &mut nav));
+                        })
+                    {
+                        popup = r.response.rect;
+                    }
+                },
+            );
+            texts = out
+                .shapes
+                .iter()
+                .filter_map(|cs| match &cs.shape {
+                    egui::Shape::Text(ts) => Some((ts.galley.text().to_string(), cs.shape.visual_bounding_rect())),
+                    _ => None,
+                })
+                .collect();
+            out.textures_delta.clear();
+        }
+        (popup, texts)
+    }
+
+    /// In a right-to-left menu popup every row anchors at the popup's right edge (reading
+    /// start) with the shortcut at its left — including a disabled row without one; the
+    /// left-to-right popup is unchanged (labels at the left edge).
+    #[test]
+    fn rtl_popup_menu_body_mirrors_every_row() {
+        let at = |v: &[(String, egui::Rect)], s: &str| v.iter().find(|(t, _)| t.contains(s)).map(|(_, r)| *r).unwrap_or(egui::Rect::NOTHING);
+        let (rtl_popup, rtl) = popup_level_texts(crate::direction::Dir::Rtl);
+        let (ltr_popup, ltr) = popup_level_texts(crate::direction::Dir::Ltr);
+        assert!(rtl_popup.is_positive() && ltr_popup.is_positive(), "the popups opened: {rtl_popup:?} {ltr_popup:?}");
+        // Frame margin plus button padding and checkmark gutter: the label may sit this far
+        // from the popup edge.
+        let slack = 32.0;
+        let (undo, sc, dis) = (at(&rtl, "Undo"), at(&rtl, "Z"), at(&rtl, "Spell Check"));
+        assert!(rtl_popup.right() - undo.right() < slack, "rtl: the label hugs the popup's right edge: {undo:?} in {rtl_popup:?}");
+        assert!(rtl_popup.right() - dis.right() < slack, "rtl: the disabled row's label hugs the right edge too: {dis:?} in {rtl_popup:?}");
+        assert!(sc.left() - rtl_popup.left() < slack, "rtl: the shortcut sits at the popup's left edge: {sc:?} in {rtl_popup:?}");
+        let (undo, sc, dis) = (at(&ltr, "Undo"), at(&ltr, "Z"), at(&ltr, "Spell Check"));
+        assert!(undo.left() - ltr_popup.left() < slack, "ltr: the label hugs the popup's left edge: {undo:?} in {ltr_popup:?}");
+        assert!(dis.left() - ltr_popup.left() < slack, "ltr: the disabled row's label hugs the left edge too: {dis:?} in {ltr_popup:?}");
+        assert!(ltr_popup.right() - sc.right() < slack, "ltr: the shortcut sits at the popup's right edge: {sc:?} in {ltr_popup:?}");
     }
 }

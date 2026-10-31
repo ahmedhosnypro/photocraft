@@ -1,6 +1,6 @@
 use super::invoke::invoke;
 use super::items::{ItemCache, MenuItem, menu_items};
-use super::render::{alt_click, render_level, render_level_rows, render_level_with};
+use super::render::{alt_click, popup_body, render_level, render_level_rows, render_level_with};
 use super::search::help_search;
 use super::{PhotocraftApp, TOP_MENUS, Value, json};
 
@@ -78,30 +78,32 @@ pub fn menu_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> f32 {
                     .style(config.style.clone())
                     .info(egui::UiStackInfo::new(egui::UiKind::Menu).with_tag_value(egui::containers::menu::MenuConfig::MENU_CONFIG_TAG, config))
                     .show(|ui| {
-                        let items = &built
-                            .get_or_init(|| {
-                                let state = crate::native_menu::state_hash(app_ref, None);
-                                let input = crate::native_menu::had_input(ui.ctx());
-                                let items = kept.take().and_then(|c| c.reuse(state, input)).unwrap_or_else(|| menu_items(app_ref));
-                                ItemCache { state, items }
-                            })
-                            .items;
-                        let mine: Vec<&MenuItem> = items.iter().filter(|i| i.path.first().map(String::as_str) == Some(*top)).collect();
-                        ui.set_min_width(220.0);
-                        if mine.is_empty() {
-                            ui.weak(crate::i18n::tr(lang, "(coming soon)"));
-                        }
-                        if *top == "Help" {
-                            // The search field scrolls with the rows, as part of the menu's
-                            // content; the level still goes through `render_level_with` so the
-                            // right-to-left body scope covers it like every other menu.
-                            render_level_with(ui, 1, &mut nav, |ui, nav| {
-                                help_search(ui, items, opening, &mut clicked, nav);
-                                render_level_rows(ui, &mine, 1, &mut clicked, nav);
-                            });
-                        } else {
-                            render_level(ui, &mine, 1, &mut clicked, &mut nav);
-                        }
+                        popup_body(ui, |ui| {
+                            let items = &built
+                                .get_or_init(|| {
+                                    let state = crate::native_menu::state_hash(app_ref, None);
+                                    let input = crate::native_menu::had_input(ui.ctx());
+                                    let items = kept.take().and_then(|c| c.reuse(state, input)).unwrap_or_else(|| menu_items(app_ref));
+                                    ItemCache { state, items }
+                                })
+                                .items;
+                            let mine: Vec<&MenuItem> = items.iter().filter(|i| i.path.first().map(String::as_str) == Some(*top)).collect();
+                            ui.set_min_width(220.0);
+                            if mine.is_empty() {
+                                ui.weak(crate::i18n::tr(lang, "(coming soon)"));
+                            }
+                            if *top == "Help" {
+                                // The search field scrolls with the rows, as part of the menu's
+                                // content; the level still goes through `render_level_with` so the
+                                // right-to-left body scope covers it like every other menu.
+                                render_level_with(ui, 1, &mut nav, |ui, nav| {
+                                    help_search(ui, items, opening, &mut clicked, nav);
+                                    render_level_rows(ui, &mine, 1, &mut clicked, nav);
+                                });
+                            } else {
+                                render_level(ui, &mine, 1, &mut clicked, &mut nav);
+                            }
+                        })
                     });
                 buttons.push(title);
             }
