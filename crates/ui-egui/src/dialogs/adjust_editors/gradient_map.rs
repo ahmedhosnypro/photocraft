@@ -389,12 +389,7 @@ mod tests {
     /// Open the preset combo's list with a plain click: the PressCombo opens on the press and
     /// the release on the box leaves the list open for a second click.
     fn open_preset_popup(h: &mut egui_kittest::Harness<'_, Value>) {
-        let at = h
-            .query_all_by_role(egui::accesskit::Role::ComboBox)
-            .last()
-            .unwrap_or_else(|| panic!("the preset combo"))
-            .rect()
-            .center();
+        let at = h.query_all_by_role(egui::accesskit::Role::ComboBox).last().unwrap_or_else(|| panic!("the preset combo")).rect().center();
         h.hover_at(at);
         h.run_steps(1);
         h.drag_at(at);
@@ -471,12 +466,7 @@ mod tests {
             h.run_steps(1);
             h.drop_at(at);
             h.run_steps(3);
-            let hexes: Vec<&Value> = h
-                .state()
-                .get("stops")
-                .and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(|s| s.get(1)).collect())
-                .unwrap_or_default();
+            let hexes: Vec<&Value> = h.state().get("stops").and_then(Value::as_array).map(|a| a.iter().filter_map(|s| s.get(1)).collect()).unwrap_or_default();
             assert_eq!(hexes, vec![&json!("#008080"), &json!("#ffee00")], "picking the swatch writes its stops");
         }
     }
