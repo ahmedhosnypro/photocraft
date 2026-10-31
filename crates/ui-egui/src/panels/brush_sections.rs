@@ -68,6 +68,17 @@ fn dim(ui: &mut egui::Ui, s: &str) {
     ui.label(RichText::new(s).color(t.text_dim));
 }
 
+/// A row's trailing controls pinned to the reading end in RTL, so every fixed-width value
+/// field and dropdown in the section bodies shares one trailing edge across rows. LTR keeps
+/// the row's natural left-to-right packing (pixel-identical).
+fn trailing_controls(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
+    if crate::direction::is_rtl() {
+        ui.with_layout(crate::direction::trailing(), add);
+    } else {
+        add(ui);
+    }
+}
+
 /// Whether a dynamic's control has a 0..1 input its own response curve shapes (not Off, not the
 /// direction controls, not Angle Jitter, whose controls set an angle).
 pub(crate) fn takes_curve(control: Control, angle: bool) -> bool {
@@ -87,17 +98,19 @@ fn control_row(ui: &mut egui::Ui, id: &str, d: &mut Dynamic, angle: bool) {
     let mut open: bool = ui.data(|m| m.get_temp(open_id)).unwrap_or(false);
     ui.horizontal(|ui| {
         dim(ui, tl!("Control:"));
-        let n = if angle || matches!(d.control, Control::InitialDirection | Control::Direction) { 8 } else { 6 };
-        widgets::dropdown(ui, id, tl!("Control:"), &mut d.control, &CONTROLS[..n], 130.0);
-        if d.control == Control::Fade {
-            let mut steps = d.fade_steps as f32;
-            if widgets::value_field(ui, &mut steps, 1.0..=9999.0, "", 56.0).accessible_name(tl!("Fade steps")).on_hover_text(tl!("Fade steps")).changed() {
-                d.fade_steps = steps.round().clamp(1.0, 9999.0) as u32;
+        trailing_controls(ui, |ui| {
+            let n = if angle || matches!(d.control, Control::InitialDirection | Control::Direction) { 8 } else { 6 };
+            widgets::dropdown(ui, id, tl!("Control:"), &mut d.control, &CONTROLS[..n], 130.0);
+            if d.control == Control::Fade {
+                let mut steps = d.fade_steps as f32;
+                if widgets::value_field(ui, &mut steps, 1.0..=9999.0, "", 56.0).accessible_name(tl!("Fade steps")).on_hover_text(tl!("Fade steps")).changed() {
+                    d.fade_steps = steps.round().clamp(1.0, 9999.0) as u32;
+                }
             }
-        }
-        if takes_curve(d.control, angle) && crate::icons::button(ui, "spline", 22.0, open || !d.curve.is_linear(), tl!("Response curve")).clicked() {
-            open = !open;
-        }
+            if takes_curve(d.control, angle) && crate::icons::button(ui, "spline", 22.0, open || !d.curve.is_linear(), tl!("Response curve")).clicked() {
+                open = !open;
+            }
+        });
     });
     if open && takes_curve(d.control, angle) {
         let mut points = d.curve.points();
@@ -488,7 +501,9 @@ fn texture(ui: &mut egui::Ui, b: &mut BrushSettings) {
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         dim(ui, tl!("Mode:"));
-        widgets::dropdown(ui, "brush-texture-mode", tl!("Mode"), &mut tx.mode, &MASK_MODES, 130.0);
+        trailing_controls(ui, |ui| {
+            widgets::dropdown(ui, "brush-texture-mode", tl!("Mode"), &mut tx.mode, &MASK_MODES, 130.0);
+        });
     });
     ui.add_space(4.0);
     pct(ui, tl!("Depth"), &mut tx.depth, 1.0);
@@ -504,9 +519,11 @@ fn dual_brush(ui: &mut egui::Ui, b: &mut BrushSettings, presets: &[BrushPreset])
     let d = &mut b.dual_brush;
     ui.horizontal(|ui| {
         dim(ui, tl!("Mode:"));
-        widgets::dropdown(ui, "brush-dual-mode", tl!("Mode"), &mut d.mode, &MASK_MODES, 120.0);
-        ui.add_space(8.0);
-        widgets::checkbox(ui, &mut d.flip, tl!("Flip"));
+        trailing_controls(ui, |ui| {
+            widgets::dropdown(ui, "brush-dual-mode", tl!("Mode"), &mut d.mode, &MASK_MODES, 120.0);
+            ui.add_space(8.0);
+            widgets::checkbox(ui, &mut d.flip, tl!("Flip"));
+        });
     });
     ui.add_space(4.0);
     // The dual tip is a sub-setting, not a selection: no persistent highlight (a look-alike match
