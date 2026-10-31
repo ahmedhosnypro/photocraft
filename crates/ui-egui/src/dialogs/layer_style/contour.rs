@@ -103,7 +103,10 @@ pub(super) fn row(
     let t = Tokens::get(ui.ctx());
     // The row reads in the UI's direction: the label at the reading start, the picker at the end.
     // One interaction band tall, as `ui.horizontal` allocates, so LTR keeps its top placement.
-    let size = vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y);
+    // In a right-to-left fork the available-width read balloons; the column's max_rect carries
+    // the same width the left-to-right read sees at the start of a row.
+    let avail_x = if crate::direction::is_rtl() { ui.max_rect().width() } else { ui.available_size_before_wrap().x };
+    let size = vec2(avail_x, ui.spacing().interact_size.y);
     ui.allocate_ui_with_layout(size, crate::direction::row(), |ui| {
         if label.is_empty() {
             ui.add_space(16.0);
