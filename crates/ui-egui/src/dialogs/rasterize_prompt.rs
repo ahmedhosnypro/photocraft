@@ -272,8 +272,7 @@ mod rtl_tests {
             crate::PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
             h.run();
             let frame = frame.get().unwrap();
-            // kittest 0.5's get_by_label takes &str, so borrow the translated string
-            let label = h.get_by_label(&tl!("Rasterize the type?")).rect();
+            let label = h.get_by_label(tl!("Rasterize the type?")).rect();
             let gap = if rtl { frame.right() - label.right() } else { label.left() - frame.left() };
             assert!(gap > 32.0, "{dir:?}: the 32 px caution mark leads the question: {label:?} in {frame:?}");
         }
