@@ -461,10 +461,7 @@ mod tests {
         );
         PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::Studio);
         h.run_steps(4);
-        (
-            h.get_by_label_contains("Commit any current edits").rect(),
-            h.get_by_label_contains("Cancel any current edits").rect(),
-        )
+        (h.get_by_label_contains("Commit any current edits").rect(), h.get_by_label_contains("Cancel any current edits").rect())
     }
 
     /// The commit/cancel group hugs the bar's reading end — far right in LTR, far left in RTL —
