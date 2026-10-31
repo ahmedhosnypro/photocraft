@@ -74,15 +74,7 @@ enum Transport {
     Time,
 }
 
-const TRANSPORT: [Transport; 7] = [
-    Transport::Play,
-    Transport::Stop,
-    Transport::Prev,
-    Transport::Frame,
-    Transport::Next,
-    Transport::Gap,
-    Transport::Time,
-];
+const TRANSPORT: [Transport; 7] = [Transport::Play, Transport::Stop, Transport::Prev, Transport::Frame, Transport::Next, Transport::Gap, Transport::Time];
 
 /// The transport strip inside a row already laid out in its screen direction: emitted in table
 /// order under a left-to-right layout, in reverse under a right-to-left one, so the drawn order
