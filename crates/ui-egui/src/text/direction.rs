@@ -159,6 +159,14 @@ pub fn window_body<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -
     }
 }
 
+/// Run a block inside a left-to-right scope even in a right-to-left UI. `egui::Grid` places its
+/// first cell at the raw cursor, which is `x = -inf` at the start of a right-to-left row, so a
+/// grid must never sit directly in an RTL row; wrap it in this and mirror the cell order with
+/// [`grid_cells`].
+pub fn ltr<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> egui::InnerResponse<R> {
+    ui.with_layout(Layout::left_to_right(Align::Min), add)
+}
+
 /// Two `egui::Grid` cells in reading order — label then editor left-to-right, editor then label
 /// right-to-left. `egui::Grid` ignores the direction flag, so the column order is emitted
 /// manually. Call once per row; end the row with `ui.end_row()` as usual.
