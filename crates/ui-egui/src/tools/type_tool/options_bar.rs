@@ -253,7 +253,9 @@ pub(super) fn kerning_field(ui: &mut egui::Ui, shown: &str, width: f32) -> Optio
     let mut out = None;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
-        let resp = ui.add(egui::TextEdit::singleline(&mut buf).desired_width((width - 40.0).max(24.0)).id(id.with("edit"))).accessible_name(tl!("Kerning"));
+        // Numeric-by-content: the value stays LTR, but under RTL the field right-aligns via the helper.
+        let mut layouter = crate::widgets::rtl_singleline_layouter(egui::FontId::default());
+        let resp = ui.add(crate::widgets::rtl_singleline(&mut buf, &mut layouter).desired_width((width - 40.0).max(24.0)).id(id.with("edit"))).accessible_name(tl!("Kerning"));
         if resp.has_focus() {
             ui.data_mut(|d| d.insert_temp(id, buf.clone()));
         } else {
