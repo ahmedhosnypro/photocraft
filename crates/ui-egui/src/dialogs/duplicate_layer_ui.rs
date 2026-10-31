@@ -246,9 +246,7 @@ mod rtl_tests {
         let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
         app.run("file.new", json!({"width": 16, "height": 16})).unwrap();
         app.run("layer.new.layer", json!({"name": "Ink"})).unwrap();
-        let mut h = egui_kittest::Harness::builder()
-            .with_size(egui::vec2(1280.0, 800.0))
-            .build_ui_state(|ui, app| crate::dialogs::show(app, ui.ctx()), app);
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1280.0, 800.0)).build_ui_state(|ui, app| crate::dialogs::show(app, ui.ctx()), app);
         PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::ALL[0]);
         open(h.state_mut()).unwrap();
         h.run_steps(4);
@@ -308,9 +306,7 @@ mod rtl_tests {
                 f.contains(r.center()).then_some((r.top(), if rtl { -r.left() } else { r.left() }, text))
             })
             .collect();
-        rows.sort_by(|a, b| {
-            a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-        });
+        rows.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)));
         rows.into_iter().map(|(_, _, t)| t).collect()
     }
 
