@@ -18,6 +18,44 @@ use crate::canvas::{ToolEvent, ViewXform};
 use crate::state::Tool;
 use crate::theme::Tokens;
 
+/// A layouter that pins the paragraph base direction right-to-left, so the field's text
+/// runs right-to-left whatever script it starts with.
+fn rtl_layouter(singleline: bool) -> impl FnMut(&egui::Ui, &dyn egui::TextBuffer, f32) -> std::sync::Arc<egui::Galley> {
+    let font = FontId::default();
+    move |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| {
+        let mut job = if singleline {
+            egui::text::LayoutJob::simple_singleline(text.as_str().to_owned(), font.clone(), ui.visuals().text_color())
+        } else {
+            egui::text::LayoutJob::simple(text.as_str().to_owned(), font.clone(), ui.visuals().text_color(), wrap_width)
+        };
+        job.direction = egui::epaint::text::TextDirection::RightToLeft;
+        job.halign = egui::Align::Max;
+        job.keep_trailing_whitespace = true;
+        ui.fonts_mut(|f| f.layout_job(job))
+    }
+}
+
+/// A single-line text field whose text runs right-to-left in a right-to-left UI, aligned to
+/// the reading end; a left-to-right UI keeps egui's default edit, pixel-identical.
+fn rtl_singleline(ui: &mut egui::Ui, text: &mut String, width: f32) -> egui::Response {
+    let edit = egui::TextEdit::singleline(text).desired_width(width);
+    if !crate::direction::is_rtl() {
+        return ui.add(edit);
+    }
+    let mut layouter = rtl_layouter(true);
+    ui.add(edit.align(Align2::RIGHT_CENTER).layouter(&mut layouter))
+}
+
+/// The multiline notes field, same right-to-left text direction, aligned to the reading end.
+fn rtl_multiline(ui: &mut egui::Ui, text: &mut String, rows: usize, width: f32) -> egui::Response {
+    let edit = egui::TextEdit::multiline(text).desired_rows(rows).desired_width(width);
+    if !crate::direction::is_rtl() {
+        return ui.add(edit);
+    }
+    let mut layouter = rtl_layouter(false);
+    ui.add(edit.align(Align2::RIGHT_TOP).layouter(&mut layouter))
+}
+
 /// What a pointer drag is doing (not serialised).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Drag {
@@ -575,7 +613,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui, tool: Tool) -> bo
         Tool::Note => {
             let t = Tokens::get(ui.ctx());
             let author_label = ui.label(RichText::new(tl!("Author:")).color(t.text_dim).size(11.0));
-            ui.add(egui::TextEdit::singleline(&mut app.ui.analysis.note_author).desired_width(120.0)).labelled_by(author_label.id);
+            rtl_singleline(ui, &mut app.ui.analysis.note_author, 120.0).labelled_by(author_label.id);
             ui.label(RichText::new(tl!("Color:")).color(t.text_dim).size(11.0));
             let rgb = app.ui.analysis.note_color;
             if crate::widgets::color_swatch_button(ui, color32(rgb), tl!("Color")).clicked() {
@@ -802,7 +840,7 @@ fn notes_panel(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 let note = &notes[i];
                 ui.label(RichText::new(if note.author.is_empty() { tl!("No author").to_string() } else { note.author.clone() }).color(t.text_dim).size(11.0));
                 let mut text = note.text.clone();
-                if ui.add(egui::TextEdit::multiline(&mut text).desired_rows(6).desired_width(f32::INFINITY)).accessible_name(tl!("Notes")).changed() {
+                if rtl_multiline(ui, &mut text, 6, f32::INFINITY).accessible_name(tl!("Notes")).changed() {
                     edit = Some(json!({"index": i, "text": text, "coalesce": format!("note-{i}")}));
                 }
             }
@@ -921,7 +959,7 @@ fn dialog(app: &mut PhotocraftApp, ctx: &egui::Context) {
                                 let units_label =
                                     ui.add_sized(vec2(110.0, 18.0), egui::Label::new(RichText::new(tl!("Logical Units:")).color(t.text_dim).size(11.0)));
                                 let mut u = f.get("units").and_then(Value::as_str).unwrap_or("pixels").to_string();
-                                if ui.add(egui::TextEdit::singleline(&mut u).desired_width(80.0)).labelled_by(units_label.id).changed() {
+                                if rtl_singleline(ui, &mut u, 80.0).labelled_by(units_label.id).changed() {
                                     f.insert("units".into(), json!(u));
                                 }
                             });
