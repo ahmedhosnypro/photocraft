@@ -534,6 +534,51 @@ mod tests {
     }
 
     #[test]
+    fn debug_window_size_probe() {
+        use egui_kittest::Harness;
+        for (name, body) in [
+            ("plain_label", 0u8),
+            ("horizontal", 1),
+            ("row_center", 2),
+            ("row_min", 3),
+        ] {
+            let mut h = Harness::builder().with_size(egui::vec2(900.0, 600.0)).build_ui_state(
+                |ui, body| {
+                    egui::Window::new("t")
+                        .id(egui::Id::unique("w"))
+                        .collapsible(false)
+                        .resizable(false)
+                        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                        .show(ui.ctx(), |ui| match body {
+                            1 => {
+                                ui.horizontal(|ui| {
+                                    ui.label("a");
+                                });
+                            }
+                            2 => {
+                                ui.with_layout(crate::text::direction::row(), |ui| {
+                                    ui.label("a");
+                                });
+                            }
+                            3 => {
+                                ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+                                    ui.label("a");
+                                });
+                            }
+                            _ => {
+                                ui.label("a");
+                            }
+                        });
+                },
+                body,
+            );
+            h.run_steps(4);
+            let r = h.ctx.memory(|m| m.area_rect(egui::Id::unique("w"))).unwrap();
+            eprintln!("probe {name}: {r:?}");
+        }
+    }
+
+    #[test]
     fn saved_workspaces_preserve_host_chrome_on_select_and_reset() {
         for (menu_bar, rail) in [(false, false), (false, true), (true, false), (true, true)] {
             for legacy_flags in [false, true] {
