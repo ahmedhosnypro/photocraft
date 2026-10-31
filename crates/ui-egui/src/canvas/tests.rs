@@ -1188,7 +1188,7 @@ fn clone_overlay_app(size: f32) -> PhotocraftApp {
 /// One frame of the overlay at (32, 32): its shapes and texture uploads.
 fn clone_overlay_frame(ctx: &egui::Context, app: &mut PhotocraftApp, xf: &ViewXform) -> egui::FullOutput {
     ctx.run_ui(Default::default(), |ui| {
-        let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("clone-test")));
+        let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("clone-test")));
         draw_clone_preview(app, &painter, xf, [32.0, 32.0], None);
     })
 }
